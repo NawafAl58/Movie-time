@@ -1,101 +1,118 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinema Time TV</title>
-    <style>
-        :root { --primary: #e50914; --bg: #0a0b0d; --card-bg: #14171c; --text: #fff; }
-        body { background-color: var(--bg); color: var(--text); padding: 20px; font-family: sans-serif; }
-        .slider { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 20px; padding: 20px; scroll-behavior: smooth; }
-        .card { flex: 0 0 200px; background: var(--card-bg); border-radius: 10px; cursor: pointer; transition: 0.3s; }
-        .card:focus { transform: scale(1.1); border: 2px solid var(--primary); }
-        .card img { width: 100%; height: 300px; object-fit: cover; border-radius: 10px; }
-        .card-title { padding: 10px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; }
-        iframe { width: 100%; height: 90%; border: none; }
-        .controls { height: 10%; display: flex; justify-content: center; align-items: center; gap: 10px; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>منصة البث</title>
+
+<style>
+body{
+    margin:0;
+    background:#0f0f0f;
+    color:white;
+    font-family:Arial,sans-serif;
+}
+
+header{
+    background:#111;
+    padding:15px 30px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.logo{
+    font-size:28px;
+    font-weight:bold;
+}
+
+.search{
+    padding:10px;
+    width:250px;
+    border:none;
+    border-radius:8px;
+}
+
+.hero{
+    height:500px;
+    background:url('banner.jpg') center/cover;
+    display:flex;
+    align-items:end;
+    padding:40px;
+}
+
+.hero h1{
+    font-size:48px;
+}
+
+.section{
+    padding:30px;
+}
+
+.movies{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+    gap:20px;
+}
+
+.card{
+    background:#1b1b1b;
+    border-radius:10px;
+    overflow:hidden;
+    transition:0.3s;
+    cursor:pointer;
+}
+
+.card:hover{
+    transform:scale(1.05);
+}
+
+.card img{
+    width:100%;
+    height:260px;
+    object-fit:cover;
+}
+
+.card h3{
+    padding:10px;
+    margin:0;
+}
+</style>
 </head>
+
 <body>
-    <header style="text-align:center; margin-bottom: 20px;">
-        <h1>Cinema Time TV</h1>
-        <input type="text" id="search" placeholder="Search (English)..." onkeypress="handleSearch(event)">
-    </header>
-    <div class="slider" id="slider"></div>
 
-    <div class="modal" id="modal">
-        <div class="controls">
-            <input type="number" id="sNum" value="1" style="width:50px">
-            <input type="number" id="eNum" value="1" style="width:50px">
-            <button onclick="play()">Play</button>
-            <button onclick="closeModal()">Close</button>
+<header>
+    <div class="logo">STREAM</div>
+    <input type="text" class="search" placeholder="ابحث...">
+</header>
+
+<div class="hero">
+    <h1>أحدث الإضافات</h1>
+</div>
+
+<div class="section">
+    <h2>الأفلام</h2>
+
+    <div class="movies">
+
+        <div class="card">
+            <img src="poster1.jpg">
+            <h3>عنوان الفيلم</h3>
         </div>
-        <iframe id="frame" allowfullscreen></iframe>
+
+        <div class="card">
+            <img src="poster2.jpg">
+            <h3>عنوان الفيلم</h3>
+        </div>
+
+        <div class="card">
+            <img src="poster3.jpg">
+            <h3>عنوان الفيلم</h3>
+        </div>
+
     </div>
+</div>
 
-    <script>
-        const API_KEY = 'Fe4b6ec1a6183fddf681565506956216';
-        let currentType = 'movie', currentId = '';
-
-        // قائمة طوارئ تشتغل دائماً لو فشل الإنترنت
-        const fallback = [
-            { id: 'tt1160419', title: 'Dune', poster: 'https://m.media-amazon.com/images/M/MV5BN2QyZGU4ZDctOWMzNS00OTc5LWEwOTctMWMxOWU5M2U5MWExXkEyXkFqcGdeQXVyMTY3ODkyNDkz._V1_.jpg' },
-            { id: 'tt1375666', title: 'Inception', poster: 'https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_.jpg' },
-            { id: 'tt0903747', title: 'Breaking Bad', poster: 'https://m.media-amazon.com/images/M/MV5BYmQ4YWMxYjUtNjZmNy00MDVmLWFhMTUtNzU0MGZiOGYzOGE1XkEyXkFqcGdeQXVyMTkxNjUyNQ@@._V1_.jpg' }
-        ];
-
-        async function loadMovies(query = '') {
-            const slider = document.getElementById('slider');
-            slider.innerHTML = 'Loading...';
-            try {
-                const url = query ? `https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&query=${query}` : `https://api.themoviedb.org/3/trending/all/week?api_key=${API_KEY}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                if (!data.results || data.results.length === 0) throw new Error();
-                
-                slider.innerHTML = '';
-                data.results.forEach(m => {
-                    if (!m.poster_path) return;
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.tabIndex = 0;
-                    card.innerHTML = `<img src="https://image.tmdb.org/t/p/w500${m.poster_path}"><div class="card-title">${m.title || m.name}</div>`;
-                    card.onclick = () => open(m.id, m.media_type || 'movie');
-                    slider.appendChild(card);
-                });
-            } catch (e) {
-                // لو فشل الإنترنت أو الـ API، نشغل قائمة الطوارئ
-                console.log("Using fallback");
-                slider.innerHTML = '';
-                fallback.forEach(m => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.tabIndex = 0;
-                    card.innerHTML = `<img src="${m.poster}"><div class="card-title">${m.title}</div>`;
-                    card.onclick = () => open(m.id, 'movie');
-                    slider.appendChild(card);
-                });
-            }
-        }
-
-        function open(id, type) {
-            currentId = id; currentType = type;
-            document.getElementById('modal').style.display = 'block';
-            play();
-        }
-
-        function play() {
-            const s = document.getElementById('sNum').value, e = document.getElementById('eNum').value;
-            const frame = document.getElementById('frame');
-            if (currentType === 'movie') frame.src = `https://vidsrc.to/embed/movie/${currentId}`;
-            else frame.src = `https://vidsrc.to/embed/tv/${currentId}/${s}/${e}`;
-        }
-
-        function closeModal() { document.getElementById('modal').style.display = 'none'; }
-        function handleSearch(e) { if (e.key === 'Enter') loadMovies(e.target.value); }
-
-        loadMovies();
-    </script>
 </body>
 </html>
