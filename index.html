@@ -21,7 +21,6 @@
         input { width: 100%; padding: 18px 30px; border-radius: 35px; border: 3px solid transparent; background: var(--card-bg); color: white; font-size: 1.4rem; outline: none; text-align: center; transition: 0.2s; }
         input:focus { border-color: var(--primary); box-shadow: var(--focus-shadow); background: #000; }
         
-        /* الواجهة الأفقية اللي طلبتها (جنب بعض) */
         .slider { 
             display: flex; 
             flex-wrap: nowrap; 
@@ -61,6 +60,7 @@
         .close-btn:focus, .close-btn:hover { background: white; color: black; outline: none; }
         
         .iframe-container { flex: 1; width: 100%; position: relative; }
+        /* تم إزالة الـ Sandbox اللي كان يعطل الفيديو تماماً */
         iframe { width: 100%; height: 100%; border: none; }
     </style>
 </head>
@@ -91,12 +91,12 @@
             <button class="close-btn" id="closeBtn" onclick="closePlayer()">Back (X)</button>
         </div>
         <div class="iframe-container">
-            <iframe id="videoFrame" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+            <iframe id="videoFrame" allowfullscreen></iframe>
         </div>
     </div>
 
     <script>
-        const API_KEY = '5848d668'; // العودة لمفتاح OMDb السليم والمفتوح للشاشات
+        const API_KEY = '5848d668'; 
         let currentType = 'movie'; 
         let currentId = '';
         let isModalOpen = false;
@@ -104,7 +104,6 @@
         async function fetchContent(term) {
             const slider = document.getElementById('mainSlider');
             try {
-                // نطلب البيانات بنظام البحث الجماعي المتوافق مع حسابك
                 const response = await fetch(`https://www.omdbapi.com/?apikey=${API_KEY}&s=${encodeURIComponent(term)}&type=${currentType}`);
                 const data = await response.json();
                 
@@ -148,7 +147,6 @@
             card.tabIndex = 0;
             card.onclick = () => openPlayer(item.imdbID);
             
-            // استخدام رابط البوستر المباشر لـ OMDb لضمان السرعة القصوى
             card.innerHTML = `
                 <img src="${item.Poster}" alt="${item.Title}">
                 <div class="card-info">
@@ -183,14 +181,15 @@
             const frame = document.getElementById('videoFrame');
             const inputs = document.getElementById('episodeInputs');
             
+            // استخدام vidsrc.me الأقوى والأكثر استقراراً
             if (currentType === 'movie') {
                 inputs.style.display = 'none';
-                frame.src = `https://vidsrc.cc/vidsrc.php?imdb=${id}`;
+                frame.src = `https://vidsrc.me/embed/movie?imdb=${id}`;
             } else {
                 inputs.style.display = 'flex';
                 document.getElementById('seasonNum').value = 1;
                 document.getElementById('episodeNum').value = 1;
-                frame.src = `https://vidsrc.cc/vidsrc.php?imdb=${id}&s=1&e=1`;
+                frame.src = `https://vidsrc.me/embed/tv?imdb=${id}&season=1&episode=1`;
             }
             
             modal.style.display = 'flex';
@@ -201,7 +200,7 @@
             const s = document.getElementById('seasonNum').value || 1;
             const e = document.getElementById('episodeNum').value || 1;
             const frame = document.getElementById('videoFrame');
-            frame.src = `https://vidsrc.cc/vidsrc.php?imdb=${currentId}&s=${s}&e=${e}`;
+            frame.src = `https://vidsrc.me/embed/tv?imdb=${currentId}&season=${s}&episode=${e}`;
         }
 
         function closePlayer() {
