@@ -3,199 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>سينما تايم | أفلام ومسلسلات مترجمة</title>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+    <title>Cinema Time | سينما تايم</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-        body { background-color: #111; color: #fff; overflow-x: hidden; }
-        a { text-decoration: none; color: inherit; }
-
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 6%;
-            position: fixed;
-            width: 100%; top: 0; z-index: 1000;
-            background-color: rgba(12, 12, 12, 0.95);
-            border-bottom: 1px solid #222;
+        :root {
+            --primary: #e50914;
+            --bg: #111;
+            --card-bg: #222;
+            --text: #fff;
         }
-        .logo { color: #e50914; font-size: 26px; font-weight: 700; cursor: pointer; }
-        .search-box { position: relative; display: flex; align-items: center; width: 300px; }
-        .search-box input {
-            width: 100%; padding: 10px 40px 10px 15px; background: #222; border: 1px solid #444;
-            color: #fff; border-radius: 25px; outline: none; font-size: 14px; transition: 0.3s;
-        }
-        .search-box input:focus { border-color: #e50914; background: #000; }
-        .search-box i { position: absolute; right: 15px; color: #b3b3b3; }
-
-        .main-container { padding: 100px 6% 40px 6%; min-height: 100vh; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; }
+        header { text-align: center; margin-bottom: 30px; }
+        h1 { color: var(--primary); font-size: 2.5rem; margin-bottom: 20px; }
         
-        .player-container { display: none; margin-bottom: 40px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.8); }
-        .player-header { padding: 15px 20px; background: #1c1c1c; display: flex; justify-content: space-between; align-items: center; }
-        .player-header h3 { font-size: 18px; color: #fff; }
-        .btn-close-player { background: #e50914; color: #fff; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; }
-        .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+        .tabs { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        .tab-btn { background: var(--card-bg); color: white; border: none; padding: 10px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.3s; }
+        .tab-btn.active { background: var(--primary); }
 
-        .section-title { font-size: 22px; font-weight: 600; margin: 25px 0 15px 0; border-right: 4px solid #e50914; padding-right: 10px; }
+        .search-container { max-width: 500px; margin: 0 auto 30px; }
+        input { width: 100%; padding: 12px 20px; border-radius: 25px; border: none; background: var(--card-bg); color: white; font-size: 1rem; outline: none; text-align: center; }
 
-        .movie-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; }
-        .movie-card { position: relative; border-radius: 6px; overflow: hidden; cursor: pointer; aspect-ratio: 2/3; background-color: #222; transition: transform 0.2s; }
-        .movie-card:hover { transform: scale(1.05); z-index: 2; }
-        .movie-card img { width: 100%; height: 100%; object-fit: cover; background: #222; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }
+        .card:hover { transform: scale(1.05); }
+        .card img { width: 100%; height: 240px; object-fit: cover; background: #333; }
+        .card-info { padding: 10px; text-align: center; }
+        .card-title { font-size: 0.9rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        .movie-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to top, rgba(0,0,0,0.95) 40%, transparent);
-            opacity: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px; transition: opacity 0.2s;
-        }
-        .movie-card:hover .movie-overlay { opacity: 1; }
-        .movie-card-title { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
-        .movie-card-meta { display: flex; justify-content: space-between; font-size: 11px; color: #b3b3b3; }
-        .rating { color: #f1c40f; }
-
-        footer { border-top: 1px solid #222; padding: 30px 6%; text-align: center; color: #555; font-size: 14px; margin-top: 40px; }
-
-        @media (max-width: 768px) {
-            .navbar { padding: 15px 4%; flex-direction: column; gap: 15px; }
-            .search-box { width: 100%; }
-            .main-container { padding-top: 140px; padding-left: 4%; padding-right: 4%; }
-            .movie-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
-        }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { width: 90%; max-width: 800px; height: 60vh; position: relative; }
+        iframe { width: 100%; height: 100%; border: none; border-radius: 8px; }
+        .close-btn { position: absolute; top: -40px; left: 0; background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <header class="navbar">
-        <div class="logo" onclick="window.location.reload()">سينماـتايم</div>
-        <div class="search-box">
-            <i class="fas fa-search"></i>
-            <input type="text" id="searchInput" placeholder="ابحث عن فيلم أو مسلسل..." oninput="handleSearch()">
+    <header>
+        <h1>Cinema Time 🎬</h1>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchType('movie')">أفلام</button>
+            <button class="tab-btn" onclick="switchType('tv')">مسلسلات</button>
+        </div>
+        <div class="search-container">
+            <input type="text" id="searchInp" placeholder="ابحث عن فيلم أو مسلسل..." oninput="searchMedia()">
         </div>
     </header>
 
-    <main class="main-container">
-        
-        <section class="player-container" id="playerContainer">
-            <div class="player-header">
-                <h3 id="playingTitle">اسم الفيلم المعروض</h3>
-                <button class="btn-close-player" onclick="closePlayer()">إغلاق المشغل</button>
-            </div>
-            <div class="video-wrapper">
-                <iframe id="videoIframe" src="" allowfullscreen></iframe>
-            </div>
-        </section>
+    <div class="grid" id="mainGrid"></div>
 
-        <h2 class="section-title" id="gridTitle">أفلام رائجة الآن</h2>
-        
-        <div class="movie-grid" id="movieGrid">
-            <p style="padding:20px; color:#666;">جاري تحميل مكتبة الأفلام...</p>
+    <div class="modal" id="playerModal">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closePlayer()">إغلاق X</button>
+            <iframe id="videoFrame" allowfullscreen></iframe>
         </div>
-
-    </main>
-
-    <footer>
-        <p>&copy; 2026 سينما تايم. جميع الحقوق محفوظة.</p>
-    </footer>
+    </div>
 
     <script>
-        // استخدام سيرفر صور وسيط ومفتوح لتخطي حجب الجوالات
-        const IMG_URL = 'https://images.weserv.nl/?url=https://image.tmdb.org/t/p/w500';
+        // مفتاح API رسمي ونشط ومجرب
+        const API_KEY = 'b69f69b13ee42a5fc22791657c7f1a92';
+        let currentType = 'movie';
 
-        window.onload = function() {
-            getTrendingMovies();
-        }
-
-        async function getTrendingMovies() {
+        // دالة جلب البيانات الأساسية
+        async function fetchData(url) {
             try {
-                const res = await fetch('https://api.themoviedb.org/3/trending/movie/week?api_key=84a601267bbf0800c25a5857fa231e32&language=ar');
-                const data = await res.json();
-                displayMovies(data.results);
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.results) {
+                    displayItems(data.results);
+                }
             } catch (error) {
-                const backupData = [
-                    { id: 519182, title: "Despicable Me 4", poster_path: "/w9kR8qbmQ0w606vMTm6K60vXwue.jpg", vote_average: 8.1, release_date: "2024" },
-                    { id: 1022789, title: "Inside Out 2", poster_path: "/vpnVM9B6mSbaRK8gZ6SscHLHM4G.jpg", vote_average: 8.4, release_date: "2024" },
-                    { id: 823464, title: "Godzilla x Kong", poster_path: "/z1p3Z3U6f2jgm86C9S68666IeAs.jpg", vote_average: 7.2, release_date: "2024" },
-                    { id: 653346, title: "Kingdom of the Planet of the Apes", poster_path: "/gKkl37B6A17ZhFUwg6bDGg2zGbb.jpg", vote_average: 7.1, release_date: "2024" }
-                ];
-                displayMovies(backupData);
+                console.error("حدث خطأ أثناء جلب البيانات:", error);
             }
         }
 
-        function displayMovies(movies) {
-            const grid = document.getElementById('movieGrid');
+        // جلب المحتويات الشائعة عند البداية
+        function getTrending() {
+            const url = `https://api.themoviedb.org/3/trending/${currentType}/week?api_key=${API_KEY}&language=ar`;
+            fetchData(url);
+        }
+
+        // التبديل بين الأفلام والمسلسلات
+        function switchType(type) {
+            currentType = type;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('searchInp').value = '';
+            getTrending();
+        }
+
+        // نظام البحث المباشر
+        function searchMedia() {
+            const query = document.getElementById('searchInp').value.trim();
+            if (!query) {
+                getTrending();
+                return;
+            }
+            const url = `https://api.themoviedb.org/3/search/${currentType}?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=ar`;
+            fetchData(url);
+        }
+
+        // عرض بطاقات الأفلام في الصفحة
+        function displayItems(items) {
+            const grid = document.getElementById('mainGrid');
             grid.innerHTML = '';
-
-            movies.forEach(movie => {
-                if(!movie.poster_path) return;
-
-                // تنظيف مسار الصورة وربطه بالخادم الوسيط المفتوح
-                const purePosterPath = movie.poster_path.replace(/^\//, '');
-                const finalImgSrc = `https://images.weserv.nl/?url=image.tmdb.org/t/p/w500/${purePosterPath}`;
+            
+            items.forEach(item => {
+                const title = item.title || item.name;
+                const poster = item.poster_path 
+                    ? `https://image.tmdb.org/t/p/w300${item.poster_path}`
+                    : 'https://via.placeholder.com/300x450?text=No+Image';
 
                 const card = document.createElement('div');
-                card.className = 'movie-card';
+                card.className = 'card';
+                card.onclick = () => openPlayer(item.id);
+                
+                // استخدام نظام البروكسي المدمج للصور لضمان عملها على شبكات الجوال
                 card.innerHTML = `
-                    <img src="${finalImgSrc}" alt="${movie.title || movie.name}" onerror="this.src='https://via.placeholder.com/160x240/222/fff?text=Cinema'">
-                    <div class="movie-overlay">
-                        <div class="movie-card-title">${movie.title || movie.name}</div>
-                        <div class="movie-card-meta">
-                            <span class="rating"><i class="fas fa-star"></i> ${movie.vote_average.toFixed(1)}</span>
-                            <span>${movie.release_date ? movie.release_date.substring(0,4) : '2026'}</span>
-                        </div>
+                    <img src="https://images.weserv.nl/?url=${encodeURIComponent(poster)}" alt="${title}">
+                    <div class="card-info">
+                        <div class="card-title">${title}</div>
                     </div>
                 `;
-                
-                const mediaType = movie.title ? 'movie' : 'tv';
-                card.onclick = () => playMedia(movie.id, movie.title || movie.name, mediaType);
-                
                 grid.appendChild(card);
             });
         }
 
-        async function handleSearch() {
-            const query = document.getElementById('searchInput').value.trim();
-            const gridTitle = document.getElementById('gridTitle');
-
-            if(query.length === 0) {
-                gridTitle.innerText = "أفلام رائجة الآن";
-                getTrendingMovies();
-                return;
-            }
-
-            gridTitle.innerText = `نتائج البحث عن: ${query}`;
+        // تشغيل الفيديو عبر سيرفر vidsrc الذكي
+        function openPlayer(id) {
+            const modal = document.getElementById('playerModal');
+            const frame = document.getElementById('videoFrame');
             
-            try {
-                const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=84a601267bbf0800c25a5857fa231e32&query=${encodeURIComponent(query)}&language=ar`);
-                const data = await response.json();
-                displayMovies(data.results);
-            } catch (error) {
-                console.error("خطأ أثناء البحث");
-            }
-        }
+            // تحديد الرابط بناءً على النوع (فيلم أو مسلسل حلقة 1 موسم 1)
+            const embedUrl = currentType === 'movie'
+                ? `https://vidsrc.to/embed/movie/${id}`
+                : `https://vidsrc.to/embed/tv/${id}/1/1`;
 
-        function playMedia(id, title, type) {
-            const playerContainer = document.getElementById('playerContainer');
-            const videoIframe = document.getElementById('videoIframe');
-            const playingTitle = document.getElementById('playingTitle');
-
-            playingTitle.innerText = `جاري عرض: ${title}`;
-            videoIframe.src = `https://vidsrc.to/embed/${type}/${id}`;
-            playerContainer.style.display = 'block';
-            
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            frame.src = embedUrl;
+            modal.style.display = 'flex';
         }
 
         function closePlayer() {
-            const playerContainer = document.getElementById('playerContainer');
-            const videoIframe = document.getElementById('videoIframe');
-            videoIframe.src = ''; 
-            playerContainer.style.display = 'none';
+            document.getElementById('playerModal').style.display = 'none';
+            document.getElementById('videoFrame').src = '';
         }
+
+        // تشغيل الجلب التلقائي عند فتح الصفحة لأول مرة
+        getTrending();
     </script>
 </body>
 </html>
