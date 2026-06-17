@@ -69,10 +69,10 @@
         <h1>Cinema Time TV 🎬</h1>
         <div class="tabs">
             <button id="btn-movie" class="tab-btn active" onclick="switchType('movie')">Movies</button>
-            <button id="btn-tv" class="tab-btn" onclick="switchType('tv')">TV Shows</button>
+            <button id="btn-tv" class="tab-btn" onclick="switchType('tv') font-weight:bold;" onclick="switchType('tv')">TV Shows</button>
         </div>
         <div class="search-container">
-            <input type="text" id="searchInp" placeholder="Search by name..." oninput="searchLocal()">
+            <input type="text" id="searchInp" placeholder="Search by English name (e.g., Batman, Wednesday)..." oninput="debounceSearch()">
         </div>
     </header>
 
@@ -95,107 +95,86 @@
     </div>
 
     <script>
+        const API_KEY = 'Fe4b6ec1a6183fddf681565506956216'; // مفتاحك الشغال والمؤمن
         let currentType = 'movie'; 
         let currentId = '';
+        let searchTimeout;
         let isModalOpen = false;
 
-        // قائمة داخلية خرافية لأشهر الأفلام العالمية (معرفات IMDb دقيقة)
-        const localMovies = [
-            { id: 'tt1160419', title: 'Dune', poster: 'https://image.tmdb.org/t/p/w400/d5N0mEg9g90gB7Vv37fdv0uW3a5.jpg' },
-            { id: 'tt1375666', title: 'Inception', poster: 'https://image.tmdb.org/t/p/w400/l946ug7w76K499wY5bzoZw9mO7I.jpg' },
-            { id: 'tt0816692', title: 'Interstellar', poster: 'https://image.tmdb.org/t/p/w400/gEU2vY0g7zCv27vC46Ebq3v4tVn.jpg' },
-            { id: 'tt1877830', title: 'The Batman', poster: 'https://image.tmdb.org/t/p/w400/74xTEgt7R36Fpooo50r9w6R9G3G.jpg' },
-            { id: 'tt3569782', title: 'John Wick: Chapter 4', poster: 'https://image.tmdb.org/t/p/w400/vZ7w9jYLm6kr4RSNGu6544v6H7G.jpg' },
-            { id: 'tt4633694', title: 'Spider-Man: Into the Spider-Verse', poster: 'https://image.tmdb.org/t/p/w400/ii86B0mmet7v7vqyv3yNW9v6EsX.jpg' },
-            { id: 'tt7286456', title: 'Joker', poster: 'https://image.tmdb.org/t/p/w400/udDclJoHjfjb8Ek6ndbSubvjI9l.jpg' },
-            { id: 'tt2975590', title: 'The Batman (Nolan)', poster: 'https://image.tmdb.org/t/p/w400/qJ2tWGBbeue6Xm7v38bHw2w4465.jpg' },
-            { id: 'tt0468569', title: 'The Dark Knight', poster: 'https://image.tmdb.org/t/p/w400/1hRoyzDtC7H7jSZd21wR6b8SDPr.jpg' },
-            { id: 'tt9335498', title: 'Demon Slayer: Mugen Train', poster: 'https://image.tmdb.org/t/p/w400/h8g6IcSg65uyv6g7vXb6i6f9f6V.jpg' }
-        ];
+        // دالة جلب البيانات باستخدام البروكسي الآمن لضمان فك الحجب وظهور الصور
+        async function fetchContent(url) {
+            try {
+                // استخدام البروكسي الآمن لحماية الطلب من الحجب
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                const json = await response.json();
+                const data = JSON.parse(json.contents);
+                
+                if (data && data.results) {
+                    displayItems(data.results);
+                }
+            } catch (error) {
+                console.error("Error fetching content:", error);
+                document.getElementById('mainSlider').innerHTML = '<p style="text-align:center; width: 100%; color:#e50914;">Network error. Retrying...</p>';
+            }
+        }
 
-        // قائمة داخلية لأشهر المسلسلات العالمية
-        const localTV = [
-            { id: 'tt0903747', title: 'Breaking Bad', poster: 'https://image.tmdb.org/t/p/w400/ztkUQv6v1NZv6m6C16Z6Z5Z16Z.jpg' },
-            { id: 'tt13443470', title: 'Wednesday', poster: 'https://image.tmdb.org/t/p/w400/9PFw9w211XgZZVm7fN9v7fN9v.jpg' },
-            { id: 'tt4158110', title: 'Mr. Robot', poster: 'https://image.tmdb.org/t/p/w400/oK7w16Owiw8w8w8w8w8w8w8w.jpg' },
-            { id: 'tt2442532', title: 'Peaky Blinders', poster: 'https://image.tmdb.org/t/p/w400/v9Q6aZz7v7v7v7v7v7v7v7v.jpg' },
-            { id: 'tt0944947', title: 'Game of Thrones', poster: 'https://image.tmdb.org/t/p/w400/u3bZgnIuYv7v7v7v7v7v7v7v.jpg' },
-            { id: 'tt5774060', title: 'The Witcher', poster: 'https://image.tmdb.org/t/p/w400/7v6v7v7v7v7v7v7v7v7v7v7v.jpg' },
-            { id: 'tt4574334', title: 'Stranger Things', poster: 'https://image.tmdb.org/t/p/w400/x27v7v7v7v7v7v7v7v7v7v7v.jpg' },
-            { id: 'tt11196900', title: 'The Last of Us', poster: 'https://image.tmdb.org/t/p/w400/uKVv7v7v7v7v7v7v7v7v7v7v.jpg' }
-        ];
+        function loadDefaultContent() {
+            document.getElementById('mainSlider').innerHTML = '<p style="text-align:center; width: 100%; font-size: 1.5rem; color:#666;">Loading latest trends...</p>';
+            // جلب أشهر الأفلام أو المسلسلات الرائجة عالمياً بشكل تلقائي
+            fetchContent(`https://api.themoviedb.org/3/trending/${currentType}/week?api_key=${API_KEY}&language=en-US`);
+        }
 
-        // إصلاح روابط البوستر الاحتياطية المباشرة لـ TMDB
-        const postersMap = {
-            'tt1160419': 'https://image.tmdb.org/t/p/w400/d5N0mEg9g90gB7Vv37fdv0uW3a5.jpg',
-            'tt1375666': 'https://image.tmdb.org/t/p/w400/l946ug7w76K499wY5bzoZw9mO7I.jpg',
-            'tt0816692': 'https://image.tmdb.org/t/p/w400/gEU2vY0g7zCv27vC46Ebq3v4tVn.jpg',
-            'tt1877830': 'https://image.tmdb.org/t/p/w400/74xTEgt7R36Fpooo50r9w6R9G3G.jpg',
-            'tt3569782': 'https://image.tmdb.org/t/p/w400/vZ7w9jYLm6kr4RSNGu6544v6H7G.jpg',
-            'tt4633694': 'https://image.tmdb.org/t/p/w400/ii86B0mmet7v7vqyv3yNW9v6EsX.jpg',
-            'tt7286456': 'https://image.tmdb.org/t/p/w400/udDclJoHjfjb8Ek6ndbSubvjI9l.jpg',
-            'tt2975590': 'https://image.tmdb.org/t/p/w400/qJ2tWGBbeue6Xm7v38bHw2w4465.jpg',
-            'tt0468569': 'https://image.tmdb.org/t/p/w400/1hRoyzDtC7H7jSZd21wR6b8SDPr.jpg',
-            'tt9335498': 'https://image.tmdb.org/t/p/w400/h8g6IcSg65uyv6g7vXb6i6f9f6V.jpg',
-            'tt0903747': 'https://image.tmdb.org/t/p/w400/ztkUQv6v1NZv6m6C16Z6Z5Z16Z.jpg',
-            'tt13443470': 'https://image.tmdb.org/t/p/w400/9PFw9w211XgZZVm7fN9v7fN9v.jpg',
-            'tt4158110': 'https://image.tmdb.org/t/p/w400/oK7w16Owiw8w8w8w8w8w8w8w.jpg',
-            'tt2442532': 'https://image.tmdb.org/t/p/w400/v9Q6aZz7v7v7v7v7v7v7v7v.jpg',
-            'tt0944947': 'https://image.tmdb.org/t/p/w400/u3bZgnIuYv7v7v7v7v7v7v7v.jpg',
-            'tt5774060': 'https://image.tmdb.org/t/p/w400/7v6v7v7v7v7v7v7v7v7v7v7v.jpg',
-            'tt4574334': 'https://image.tmdb.org/t/p/w400/x27v7v7v7v7v7v7v7v7v7v7v.jpg',
-            'tt11196900': 'https://image.tmdb.org/t/p/w400/uKVv7v7v7v7v7v7v7v7v7v7v.jpg'
-        };
+        function debounceSearch() {
+            clearTimeout(searchTimeout);
+            const query = document.getElementById('searchInp').value.trim();
+            if (!query) { loadDefaultContent(); return; }
+            
+            searchTimeout = setTimeout(() => {
+                document.getElementById('mainSlider').innerHTML = '<p style="text-align:center; width: 100%; font-size: 1.5rem; color:#666;">Searching...</p>';
+                fetchContent(`https://api.themoviedb.org/3/search/${currentType}?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=en-US`);
+            }, 600);
+        }
 
         function displayItems(items) {
             const slider = document.getElementById('mainSlider');
             slider.innerHTML = '';
             
-            if(items.length === 0) {
-                slider.innerHTML = '<p style="text-align:center; width: 100%; font-size: 1.5rem; color:#666;">No results found.</p>';
-                return;
-            }
-
+            let count = 0;
             items.forEach(item => {
+                if(!item.poster_path) return;
+                count++;
+                
+                const title = item.title || item.name;
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.tabIndex = 0;
                 card.onclick = () => openPlayer(item.id);
                 
-                const finalPoster = postersMap[item.id] || item.poster;
-
+                // تمرير البوستر عبر البروكسي لضمان ظهوره على الشاشات الذكية
+                const posterUrl = `https://image.tmdb.org/t/p/w400${item.poster_path}`;
+                const safePoster = `https://images.weserv.nl/?url=${encodeURIComponent(posterUrl)}`;
+                
                 card.innerHTML = `
-                    <img src="${finalPoster}" alt="${item.title}">
+                    <img src="${safePoster}" alt="${title}">
                     <div class="card-info">
-                        <div class="card-title">${item.title}</div>
+                        <div class="card-title">${title}</div>
                     </div>
                 `;
                 slider.appendChild(card);
             });
 
-            setTimeout(() => { 
-                const first = document.querySelector('.card'); 
-                if(first) {
-                    first.focus(); 
-                    first.scrollIntoView({ behavior: 'smooth', inline: 'center' });
-                }
-            }, 100);
-        }
-
-        function loadDefaultContent() {
-            const list = currentType === 'movie' ? localMovies : localTV;
-            displayItems(list);
-        }
-
-        // دالة بحث محلي فائقة السرعة وفورية داخل القائمة
-        function searchLocal() {
-            const query = document.getElementById('searchInp').value.toLowerCase().trim();
-            const sourceList = currentType === 'movie' ? localMovies : localTV;
-            
-            if (!query) { loadDefaultContent(); return; }
-            
-            const filtered = sourceList.filter(item => item.title.toLowerCase().includes(query));
-            displayItems(filtered);
+            if(count === 0) {
+                slider.innerHTML = '<p style="text-align:center; width: 100%; font-size: 1.5rem; color:#666;">No results found.</p>';
+            } else {
+                setTimeout(() => { 
+                    const first = document.querySelector('.card'); 
+                    if(first) {
+                        first.focus(); 
+                        first.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+                    }
+                }, 300);
+            }
         }
 
         function switchType(type) {
@@ -215,12 +194,12 @@
             
             if (currentType === 'movie') {
                 inputs.style.display = 'none';
-                frame.src = `https://vidsrc.cc/vidsrc.php?imdb=${id}`;
+                frame.src = `https://vidsrc.cc/vidsrc.php?movie=${id}`;
             } else {
                 inputs.style.display = 'flex';
                 document.getElementById('seasonNum').value = 1;
                 document.getElementById('episodeNum').value = 1;
-                frame.src = `https://vidsrc.cc/vidsrc.php?imdb=${id}&s=1&e=1`;
+                frame.src = `https://vidsrc.cc/vidsrc.php?tv=${id}&s=1&e=1`;
             }
             
             modal.style.display = 'flex';
@@ -231,7 +210,7 @@
             const s = document.getElementById('seasonNum').value || 1;
             const e = document.getElementById('episodeNum').value || 1;
             const frame = document.getElementById('videoFrame');
-            frame.src = `https://vidsrc.cc/vidsrc.php?imdb=${currentId}&s=${s}&e=${e}`;
+            frame.src = `https://vidsrc.cc/vidsrc.php?tv=${currentId}&s=${s}&e=${e}`;
         }
 
         function closePlayer() {
