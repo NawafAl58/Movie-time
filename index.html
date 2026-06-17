@@ -3,121 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinema Time | سينما تايم</title>
+    <title>Cinema Time TV</title>
     <style>
         :root {
             --primary: #e50914;
-            --bg: #111;
-            --card-bg: #222;
+            --bg: #0a0b0d;
+            --card-bg: #14171c;
             --text: #fff;
+            --focus-shadow: 0 0 20px #e50914;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: var(--bg); color: var(--text); padding: 20px; }
-        header { text-align: center; margin-bottom: 30px; }
-        h1 { color: var(--primary); font-size: 2.5rem; margin-bottom: 20px; }
+        body { background-color: var(--bg); color: var(--text); padding: 40px; overflow-x: hidden; }
         
-        .tabs { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
-        .tab-btn { background: var(--card-bg); color: white; border: none; padding: 10px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.3s; }
+        header { text-align: center; margin-bottom: 40px; }
+        h1 { color: var(--primary); font-size: 3.5rem; margin-bottom: 25px; letter-spacing: 2px; }
+        
+        .tabs { display: flex; justify-content: center; gap: 25px; margin-bottom: 30px; }
+        .tab-btn { background: var(--card-bg); color: white; border: 3px solid transparent; padding: 15px 40px; border-radius: 35px; font-weight: bold; font-size: 1.5rem; cursor: pointer; transition: 0.2s; }
         .tab-btn.active { background: var(--primary); }
+        .tab-btn:focus { border-color: white; box-shadow: var(--focus-shadow); outline: none; transform: scale(1.05); }
 
-        .search-container { max-width: 500px; margin: 0 auto 30px; }
-        input { width: 100%; padding: 12px 20px; border-radius: 25px; border: none; background: var(--card-bg); color: white; font-size: 1rem; outline: none; text-align: center; }
+        .search-container { max-width: 700px; margin: 0 auto 40px; }
+        input { width: 100%; padding: 18px 30px; border-radius: 35px; border: 3px solid transparent; background: var(--card-bg); color: white; font-size: 1.4rem; outline: none; text-align: center; transition: 0.2s; }
+        input:focus { border-color: var(--primary); box-shadow: var(--focus-shadow); background: #000; }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
-        .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }
-        .card:hover { transform: scale(1.05); }
-        .card img { width: 100%; height: 240px; object-fit: cover; background: #333; }
-        .card-info { padding: 10px; text-align: center; }
-        .card-title { font-size: 0.9rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 30px; max-width: 1600px; margin: 0 auto; padding-bottom: 50px; }
+        .card { background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 4px solid transparent; transition: 0.2s; outline: none; }
+        .card img { width: 100%; height: 320px; object-fit: cover; background: #222; }
+        .card-info { padding: 15px; text-align: center; background: #111; }
+        .card-title { font-size: 1.2rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { width: 90%; max-width: 800px; height: 60vh; position: relative; }
-        iframe { width: 100%; height: 100%; border: none; border-radius: 8px; }
-        .close-btn { position: absolute; top: -40px; left: 0; background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        /* تأثير الريموت عند تحديد الفيلم */
+        .card:focus { transform: scale(1.08); border-color: var(--primary); box-shadow: var(--focus-shadow); z-index: 10; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { width: 100%; height: 100%; position: relative; }
+        iframe { width: 100%; height: 100%; border: none; }
+        .close-btn { position: absolute; top: 20px; left: 20px; background: var(--primary); color: white; border: 3px solid transparent; padding: 12px 25px; border-radius: 8px; font-weight: bold; font-size: 1.2rem; cursor: pointer; z-index: 1100; }
+        .close-btn:focus { border-color: white; box-shadow: var(--focus-shadow); outline: none; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>Cinema Time 🎬</h1>
+        <h1>Cinema Time TV 🎬</h1>
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchType('movie')">أفلام</button>
-            <button class="tab-btn" onclick="switchType('tv')">مسلسلات</button>
+            <button id="btn-movie" class="tab-btn active" onclick="switchType('movie')">الأفلام</button>
+            <button id="btn-tv" class="tab-btn" onclick="switchType('tv')">المسلسلات</button>
         </div>
         <div class="search-container">
-            <input type="text" id="searchInp" placeholder="ابحث عن فيلم أو مسلسل..." oninput="searchMedia()">
+            <input type="text" id="searchInp" placeholder="اضغط للكتابة والبحث..." oninput="searchMedia()">
         </div>
     </header>
 
-    <div class="grid" id="mainGrid"></div>
+    <div class="grid" id="mainGrid">
+        <p style="grid-column: 1/-1; text-align:center; font-size: 1.5rem; color:#666;">جاري تحميل المحتوى للشاشة...</p>
+    </div>
 
     <div class="modal" id="playerModal">
         <div class="modal-content">
-            <button class="close-btn" onclick="closePlayer()">إغلاق X</button>
+            <button class="close-btn" id="closeBtn" onclick="closePlayer()">رجوع (X)</button>
             <iframe id="videoFrame" allowfullscreen></iframe>
         </div>
     </div>
 
     <script>
-        // مفتاح API رسمي ونشط ومجرب
-        const API_KEY = 'b69f69b13ee42a5fc22791657c7f1a92';
+        // تم وضع مفتاح الـ API الخاص بك هنا بنجاح
+        const API_KEY = 'Fe4b6ec1a6183fddf681565506956216';
         let currentType = 'movie';
+        let isModalOpen = false;
 
-        // دالة جلب البيانات الأساسية
         async function fetchData(url) {
             try {
                 const response = await fetch(url);
                 const data = await response.json();
-                if (data.results) {
-                    displayItems(data.results);
-                }
+                if (data.results) { displayItems(data.results); }
             } catch (error) {
-                console.error("حدث خطأ أثناء جلب البيانات:", error);
+                console.error("Error fetching:", error);
             }
         }
 
-        // جلب المحتويات الشائعة عند البداية
         function getTrending() {
-            const url = `https://api.themoviedb.org/3/trending/${currentType}/week?api_key=${API_KEY}&language=ar`;
-            fetchData(url);
+            fetchData(`https://api.themoviedb.org/3/trending/${currentType}/week?api_key=${API_KEY}&language=ar`);
         }
 
-        // التبديل بين الأفلام والمسلسلات
         function switchType(type) {
             currentType = type;
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            document.getElementById(`btn-${type}`).classList.add('active');
             document.getElementById('searchInp').value = '';
             getTrending();
         }
 
-        // نظام البحث المباشر
         function searchMedia() {
             const query = document.getElementById('searchInp').value.trim();
-            if (!query) {
-                getTrending();
-                return;
-            }
-            const url = `https://api.themoviedb.org/3/search/${currentType}?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=ar`;
-            fetchData(url);
+            if (!query) { getTrending(); return; }
+            fetchData(`https://api.themoviedb.org/3/search/${currentType}?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=ar`);
         }
 
-        // عرض بطاقات الأفلام في الصفحة
         function displayItems(items) {
             const grid = document.getElementById('mainGrid');
             grid.innerHTML = '';
             
+            let focusableItems = 0;
             items.forEach(item => {
                 const title = item.title || item.name;
-                const poster = item.poster_path 
-                    ? `https://image.tmdb.org/t/p/w300${item.poster_path}`
-                    : 'https://via.placeholder.com/300x450?text=No+Image';
-
+                if(!item.poster_path) return;
+                
+                focusableItems++;
+                const poster = `https://image.tmdb.org/t/p/w400${item.poster_path}`;
                 const card = document.createElement('div');
                 card.className = 'card';
+                card.tabIndex = 0; // جعل العنصر قابلاً للتحديد بالريموت
+                card.setAttribute('data-id', item.id);
                 card.onclick = () => openPlayer(item.id);
                 
-                // استخدام نظام البروكسي المدمج للصور لضمان عملها على شبكات الجوال
                 card.innerHTML = `
                     <img src="https://images.weserv.nl/?url=${encodeURIComponent(poster)}" alt="${title}">
                     <div class="card-info">
@@ -126,29 +126,17 @@
                 `;
                 grid.appendChild(card);
             });
+
+            // تحديد أول فيلم تلقائياً عند تحميل الصفحة
+            if(focusableItems > 0) {
+                setTimeout(() => { document.querySelector('.card').focus(); }, 500);
+            }
         }
 
-        // تشغيل الفيديو عبر سيرفر vidsrc الذكي
         function openPlayer(id) {
+            isModalOpen = true;
             const modal = document.getElementById('playerModal');
             const frame = document.getElementById('videoFrame');
             
-            // تحديد الرابط بناءً على النوع (فيلم أو مسلسل حلقة 1 موسم 1)
             const embedUrl = currentType === 'movie'
-                ? `https://vidsrc.to/embed/movie/${id}`
-                : `https://vidsrc.to/embed/tv/${id}/1/1`;
-
-            frame.src = embedUrl;
-            modal.style.display = 'flex';
-        }
-
-        function closePlayer() {
-            document.getElementById('playerModal').style.display = 'none';
-            document.getElementById('videoFrame').src = '';
-        }
-
-        // تشغيل الجلب التلقائي عند فتح الصفحة لأول مرة
-        getTrending();
-    </script>
-</body>
-</html>
+                ? `https://vidsrc.to/embed/movie/${id
