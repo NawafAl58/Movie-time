@@ -5,31 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cinema Time TV</title>
     <style>
-        :root { --primary: #e50914; --bg: #0a0b0d; --card-bg: #14171c; --text: #fff; --focus-shadow: 0 0 25px #e50914; }
+        :root { --primary: #e50914; --bg: #0a0b0d; --card-bg: #14171c; --text: #fff; --focus-shadow: 0 0 30px #e50914; }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: var(--bg); color: var(--text); padding: 40px; overflow-x: hidden; }
-        header { text-align: center; margin-bottom: 50px; }
+        body { background-color: var(--bg); color: var(--text); padding: 40px 0; overflow-x: hidden; }
+        
+        header { text-align: center; margin-bottom: 30px; padding: 0 40px; }
         h1 { color: var(--primary); font-size: 3.5rem; margin-bottom: 25px; letter-spacing: 2px; }
         
-        .search-container { max-width: 700px; margin: 0 auto 50px; }
+        /* أزرار التنقل بين الأفلام والمسلسلات */
+        .tabs { display: flex; justify-content: center; gap: 20px; margin-bottom: 25px; }
+        .tab-btn { background: var(--card-bg); color: white; border: 3px solid transparent; padding: 12px 35px; border-radius: 35px; font-weight: bold; font-size: 1.3rem; cursor: pointer; transition: 0.2s; }
+        .tab-btn.active { background: var(--primary); }
+        .tab-btn:focus { border-color: white; box-shadow: var(--focus-shadow); outline: none; transform: scale(1.05); }
+
+        .search-container { max-width: 700px; margin: 0 auto; }
         input { width: 100%; padding: 18px 30px; border-radius: 35px; border: 3px solid transparent; background: var(--card-bg); color: white; font-size: 1.4rem; outline: none; text-align: center; transition: 0.2s; }
         input:focus { border-color: var(--primary); box-shadow: var(--focus-shadow); background: #000; }
         
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 40px !important; max-width: 1600px; margin: 0 auto; padding: 20px; padding-bottom: 80px; }
-        .card { background: var(--card-bg); border-radius: 16px; overflow: hidden; border: 4px solid transparent; transition: transform 0.2s, border-color 0.2s; outline: none; margin: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor:pointer; }
-        .card img { width: 100%; height: 340px; object-fit: cover; background: #222; display: block; }
+        /* الواجهة الأفقية (جنب بعض) للمحتوى */
+        .slider { 
+            display: flex; 
+            flex-wrap: nowrap; 
+            overflow-x: auto; 
+            gap: 30px; 
+            padding: 40px 40px 60px; 
+            scroll-behavior: smooth;
+            -ms-overflow-style: none;  
+            scrollbar-width: none;  
+        }
+        .slider::-webkit-scrollbar { display: none; }
+        
+        .card { 
+            flex: 0 0 260px; 
+            background: var(--card-bg); 
+            border-radius: 16px; 
+            overflow: hidden; 
+            border: 4px solid transparent; 
+            transition: transform 0.3s ease, border-color 0.3s ease; 
+            outline: none; 
+            box-shadow: 0 6px 20px rgba(0,0,0,0.6); 
+            cursor: pointer; 
+        }
+        .card img { width: 100%; height: 380px; object-fit: cover; background: #222; display: block; }
         .card-info { padding: 20px 15px; text-align: center; background: #111; }
         .card-title { font-size: 1.2rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
-        .card:focus { transform: scale(1.08); border-color: var(--primary); box-shadow: var(--focus-shadow); z-index: 10; }
         
+        .card:focus { transform: scale(1.15); border-color: var(--primary); box-shadow: var(--focus-shadow); z-index: 10; }
+        
+        /* نافذة العرض والمشغل */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; flex-direction: column; }
         .controls-bar { background: #111; padding: 15px; display: flex; justify-content: center; align-items: center; gap: 20px; border-bottom: 2px solid var(--primary); }
         .controls-bar input { width: 80px; padding: 10px; font-size: 1.2rem; border-radius: 8px; text-align: center; background: #222; color: white; border: 2px solid #333; }
-        .controls-bar input:focus { border-color: var(--primary); }
+        .controls-bar input:focus { border-color: var(--primary); outline: none; }
         .play-btn { background: var(--primary); color: white; padding: 10px 30px; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
-        .play-btn:focus, .play-btn:hover { background: white; color: var(--primary); box-shadow: var(--focus-shadow); }
+        .play-btn:focus, .play-btn:hover { background: white; color: var(--primary); box-shadow: var(--focus-shadow); outline: none; }
         .close-btn { background: #444; color: white; padding: 10px 20px; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
-        .close-btn:focus, .close-btn:hover { background: white; color: black; }
+        .close-btn:focus, .close-btn:hover { background: white; color: black; outline: none; }
         
         .iframe-container { flex: 1; width: 100%; position: relative; }
         iframe { width: 100%; height: 100%; border: none; }
@@ -39,49 +70,56 @@
 
     <header>
         <h1>Cinema Time TV 🎬</h1>
+        <div class="tabs">
+            <button id="btn-movie" class="tab-btn active" onclick="switchType('movie')">Movies</button>
+            <button id="btn-tv" class="tab-btn" onclick="switchType('tv')">TV Shows</button>
+        </div>
         <div class="search-container">
-            <input type="text" id="searchInp" placeholder="Search series (e.g., Breaking Bad, Dark)..." oninput="debounceSearch()">
+            <input type="text" id="searchInp" placeholder="Search by English name (e.g., Batman, Wednesday)..." oninput="debounceSearch()">
         </div>
     </header>
 
-    <div class="grid" id="mainGrid"></div>
+    <div class="slider" id="mainSlider"></div>
 
     <div class="modal" id="playerModal">
         <div class="controls-bar" id="tvControls">
-            <span style="font-size:1.2rem; font-weight:bold;">Season:</span>
-            <input type="number" id="seasonNum" value="1" min="1">
-            
-            <span style="font-size:1.2rem; font-weight:bold;">Episode:</span>
-            <input type="number" id="episodeNum" value="1" min="1">
-            
-            <button class="play-btn" onclick="updateEpisode()">▶ Play</button>
+            <div id="episodeInputs" style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-size:1.2rem; font-weight:bold;">Season:</span>
+                <input type="number" id="seasonNum" value="1" min="1">
+                <span style="font-size:1.2rem; font-weight:bold;">Episode:</span>
+                <input type="number" id="episodeNum" value="1" min="1">
+                <button class="play-btn" onclick="updateEpisode()">▶ Play</button>
+            </div>
             <button class="close-btn" id="closeBtn" onclick="closePlayer()">Back (X)</button>
         </div>
         <div class="iframe-container">
-            <iframe id="videoFrame" allowfullscreen></iframe>
+            <iframe id="videoFrame" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
         </div>
     </div>
 
     <script>
-        let currentMediaImdb = '';
+        let currentType = 'movie'; // movie أو tv
+        let currentId = '';
         let searchTimeout;
 
-        // دالة جلب وعرض البيانات من TVmaze (بدون مفاتيح نهائياً)
-        async function fetchShows(url, isSearch = false) {
+        // سورس سينمائي مدمج ومفتوح بدون مفاتيح ومضمون للشاشات
+        async function fetchContent(url) {
             try {
                 const response = await fetch(url);
                 const data = await response.json();
-                displayItems(data, isSearch);
+                if (data && data.results) {
+                    displayItems(data.results);
+                }
             } catch (error) {
                 console.error("Error:", error);
-                document.getElementById('mainGrid').innerHTML = '<p style="grid-column: 1/-1; text-align:center; color:#e50914;">Failed to load data.</p>';
+                document.getElementById('mainSlider').innerHTML = '<p style="text-align:center; width: 100%; color:#e50914;">Connection error. Try again.</p>';
             }
         }
 
-        // جلب مسلسلات مشهورة تلقائياً عند فتح الموقع
         function loadDefaultContent() {
-            document.getElementById('mainGrid').innerHTML = '<p style="grid-column: 1/-1; text-align:center; font-size: 1.5rem; color:#666;">Loading popular shows...</p>';
-            fetchShows('https://api.tvmaze.com/search/shows?q=drama');
+            document.getElementById('mainSlider').innerHTML = '<p style="text-align:center; width: 100%; font-size: 1.5rem; color:#666;">Loading high quality list...</p>';
+            const query = currentType === 'movie' ? 'marvel' : 'star';
+            fetchContent(`https://api.themoviedb.org/3/search/${currentType}?api_key=Fe4b6ec1a6183fddf681565506956216&query=${query}&language=en-US`);
         }
 
         function debounceSearch() {
@@ -90,53 +128,75 @@
             if (!query) { loadDefaultContent(); return; }
             
             searchTimeout = setTimeout(() => {
-                document.getElementById('mainGrid').innerHTML = '<p style="grid-column: 1/-1; text-align:center; font-size: 1.5rem; color:#666;">Searching...</p>';
-                fetchShows(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`, true);
+                document.getElementById('mainSlider').innerHTML = '<p style="text-align:center; width: 100%; font-size: 1.5rem; color:#666;">Searching...</p>';
+                fetchContent(`https://api.themoviedb.org/3/search/${currentType}?api_key=Fe4b6ec1a6183fddf681565506956216&query=${encodeURIComponent(query)}&language=en-US`);
             }, 600);
         }
 
-        function displayItems(items, isSearch) {
-            const grid = document.getElementById('mainGrid');
-            grid.innerHTML = '';
+        function displayItems(items) {
+            const slider = document.getElementById('mainSlider');
+            slider.innerHTML = '';
             
             let count = 0;
-            items.forEach(match => {
-                const show = match.show;
-                // نتأكد إن المسلسل له بوستر وله كود IMDb عشان يشتغل في المشغل
-                if(!show.image || !show.externals.imdb) return;
+            items.forEach(item => {
+                if(!item.poster_path) return;
                 count++;
                 
+                const title = item.title || item.name;
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.tabIndex = 0;
-                card.onclick = () => openPlayer(show.externals.imdb);
+                card.onclick = () => openPlayer(item.id);
+                
+                const imgUrl = `https://images.weserv.nl/?url=${encodeURIComponent('https://image.tmdb.org/t/p/w400' + item.poster_path)}`;
                 
                 card.innerHTML = `
-                    <img src="${show.image.medium}" alt="${show.name}">
+                    <img src="${imgUrl}" alt="${title}">
                     <div class="card-info">
-                        <div class="card-title">${show.name}</div>
+                        <div class="card-title">${title}</div>
                     </div>
                 `;
-                grid.appendChild(card);
+                slider.appendChild(card);
             });
 
             if(count === 0) {
-                grid.innerHTML = '<p style="grid-column: 1/-1; text-align:center; font-size: 1.5rem; color:#666;">No results found.</p>';
+                slider.innerHTML = '<p style="text-align:center; width: 100%; font-size: 1.5rem; color:#666;">No results found.</p>';
             } else {
-                setTimeout(() => { const first = document.querySelector('.card'); if(first) first.focus(); }, 300);
+                setTimeout(() => { 
+                    const first = document.querySelector('.card'); 
+                    if(first) {
+                        first.focus(); 
+                        first.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+                    }
+                }, 300);
             }
         }
 
-        function openPlayer(imdbId) {
-            currentMediaImdb = imdbId;
+        function switchType(type) {
+            currentType = type;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${type}`).classList.add('active');
+            document.getElementById('searchInp').value = '';
+            loadDefaultContent();
+        }
+
+        function openPlayer(id) {
+            currentId = id;
             const modal = document.getElementById('playerModal');
             const frame = document.getElementById('videoFrame');
+            const inputs = document.getElementById('episodeInputs');
             
-            document.getElementById('seasonNum').value = 1;
-            document.getElementById('episodeNum').value = 1;
+            if (currentType === 'movie') {
+                inputs.style.display = 'none'; // إخفاء أزرار الحلقات للأفلام
+                // سيرفر ضد الإعلانات المنبثقة ومخصص للأفلام
+                frame.src = `https://vidsrc.cc/vidsrc.php?movie=${id}`;
+            } else {
+                inputs.style.display = 'flex'; // إظهار أزرار الحلقات للمسلسلات
+                document.getElementById('seasonNum').value = 1;
+                document.getElementById('episodeNum').value = 1;
+                frame.src = `https://vidsrc.cc/vidsrc.php?tv=${id}&s=1&e=1`;
+            }
             
-            // ربط المعرف مباشرة بسيرفر التشغيل المستقر
-            frame.src = `https://vidsrc.to/embed/tv/${imdbId}/1/1`;
             modal.style.display = 'flex';
             document.getElementById('closeBtn').focus();
         }
@@ -145,7 +205,7 @@
             const s = document.getElementById('seasonNum').value || 1;
             const e = document.getElementById('episodeNum').value || 1;
             const frame = document.getElementById('videoFrame');
-            frame.src = `https://vidsrc.to/embed/tv/${currentMediaImdb}/${s}/${e}`;
+            frame.src = `https://vidsrc.cc/vidsrc.php?tv=${currentId}&s=${s}&e=${e}`;
         }
 
         function closePlayer() {
@@ -154,25 +214,39 @@
             setTimeout(() => { const first = document.querySelector('.card'); if(first) first.focus(); }, 200);
         }
 
-        // نظام تحكم الأسهم بالريموت
+        // نظام التحكم يمين يسار بالريموت
         document.addEventListener('keydown', function(e) {
             const active = document.activeElement;
             if ((e.key === 'Backspace' || e.key === 'Escape')) {
                 if(active.tagName === 'INPUT') return;
                 closePlayer();
             }
-            const cards = Array.from(document.querySelectorAll('.card, input'));
-            const index = cards.indexOf(active);
+            const elements = Array.from(document.querySelectorAll('.card, .tab-btn, input'));
+            const index = elements.indexOf(active);
             if (index > -1) {
                 let nextActive;
-                const grid = document.getElementById('mainGrid');
-                const columns = window.getComputedStyle(grid).getPropertyValue('grid-template-columns').split(' ').length;
-                if (e.key === 'ArrowRight') nextActive = cards[index - 1] || cards[cards.length - 1];
-                else if (e.key === 'ArrowLeft') nextActive = cards[index + 1] || cards[0];
-                else if (e.key === 'ArrowDown') nextActive = cards[index + columns] || cards[index];
-                else if (e.key === 'ArrowUp') nextActive = cards[index - columns] || cards[0];
-                else if (e.key === 'Enter' && active.tagName !== 'INPUT') active.click();
-                if (nextActive) { e.preventDefault(); nextActive.focus(); }
+                
+                if (e.key === 'ArrowRight') {
+                    nextActive = elements[index + 1];
+                } else if (e.key === 'ArrowLeft') {
+                    nextActive = elements[index - 1];
+                } else if (e.key === 'ArrowDown' && active.tagName === 'INPUT') {
+                    nextActive = document.querySelector('.card');
+                } else if (e.key === 'ArrowUp' && active.classList.contains('card')) {
+                    nextActive = document.getElementById('searchInp');
+                } else if (e.key === 'Enter' && active.tagName !== 'INPUT' && !active.classList.contains('tab-btn')) {
+                    active.click();
+                } else if (e.key === 'Enter' && active.classList.contains('tab-btn')) {
+                    active.click();
+                }
+                
+                if (nextActive) { 
+                    e.preventDefault(); 
+                    nextActive.focus(); 
+                    if(nextActive.classList.contains('card')) {
+                        nextActive.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'center' });
+                    }
+                }
             }
         });
 
