@@ -1,254 +1,101 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cinema Time TV</title>
     <style>
-        :root { --primary: #e50914; --bg: #0a0b0d; --card-bg: #14171c; --text: #fff; --focus-shadow: 0 0 25px #e50914; }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: var(--bg); color: var(--text); padding: 20px; overflow-x: hidden; }
-        
-        header { text-align: center; margin-bottom: 30px; }
-        h1 { color: var(--primary); font-size: 3rem; margin-bottom: 20px; text-shadow: 0 2px 10px rgba(229,9,20,0.5); }
-        
-        .tabs { display: flex; justify-content: center; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
-        .tab-btn { background: var(--card-bg); color: white; border: 2px solid transparent; padding: 12px 30px; border-radius: 30px; font-weight: bold; font-size: 1.2rem; cursor: pointer; transition: 0.3s; }
-        .tab-btn.active { background: var(--primary); }
-        .tab-btn:focus, .tab-btn:hover { border-color: white; box-shadow: var(--focus-shadow); outline: none; transform: scale(1.05); }
-
-        .search-container { max-width: 600px; margin: 0 auto; padding: 0 10px; }
-        input { width: 100%; padding: 15px 25px; border-radius: 30px; border: 2px solid transparent; background: var(--card-bg); color: white; font-size: 1.2rem; outline: none; text-align: center; transition: 0.3s; }
-        input:focus { border-color: var(--primary); box-shadow: var(--focus-shadow); background: #000; }
-        
-        /* تصميم شبكي מתקدم يتوافق مع كل الشاشات */
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; max-width: 1400px; margin: 30px auto; padding-bottom: 50px; }
-        
-        .card { background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 3px solid transparent; transition: 0.3s ease; outline: none; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; position: relative; }
-        .card img { width: 100%; height: 270px; object-fit: cover; background: #222; display: block; }
-        .card-info { padding: 12px; text-align: center; background: rgba(17, 17, 17, 0.9); position: absolute; bottom: 0; width: 100%; }
-        .card-title { font-size: 1rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
-        
-        .card:focus, .card:hover { transform: scale(1.1); border-color: var(--primary); box-shadow: var(--focus-shadow); z-index: 10; }
-        
-        /* مشغل الفيديو ولوحة التحكم */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; flex-direction: column; }
-        .controls-bar { background: #111; padding: 10px 20px; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; border-bottom: 2px solid var(--primary); }
-        
-        select, .controls-bar input, .btn { padding: 10px; font-size: 1.1rem; border-radius: 8px; background: #222; color: white; border: 2px solid #333; outline: none; cursor: pointer; text-align: center; }
-        select:focus, .controls-bar input:focus { border-color: var(--primary); }
-        .controls-bar input { width: 70px; }
-        
-        .btn-play { background: var(--primary); border-color: var(--primary); font-weight: bold; padding: 10px 25px; }
-        .btn-play:focus, .btn-play:hover { background: white; color: var(--primary); box-shadow: var(--focus-shadow); }
-        .btn-close { background: #444; border-color: #444; }
-        .btn-close:focus, .btn-close:hover { background: white; color: black; }
-        
-        .iframe-container { flex: 1; width: 100%; position: relative; background: #000; }
-        iframe { width: 100%; height: 100%; border: none; }
-        
-        @media (min-width: 768px) {
-            .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 30px; }
-            .card img { height: 330px; }
-            .card-title { font-size: 1.1rem; }
-        }
+        :root { --primary: #e50914; --bg: #0a0b0d; --card-bg: #14171c; --text: #fff; }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; font-family: sans-serif; }
+        .slider { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 20px; padding: 20px; scroll-behavior: smooth; }
+        .card { flex: 0 0 200px; background: var(--card-bg); border-radius: 10px; cursor: pointer; transition: 0.3s; }
+        .card:focus { transform: scale(1.1); border: 2px solid var(--primary); }
+        .card img { width: 100%; height: 300px; object-fit: cover; border-radius: 10px; }
+        .card-title { padding: 10px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; }
+        iframe { width: 100%; height: 90%; border: none; }
+        .controls { height: 10%; display: flex; justify-content: center; align-items: center; gap: 10px; }
     </style>
 </head>
 <body>
-
-    <header>
-        <h1>Cinema Time 🎬</h1>
-        <div class="tabs">
-            <button id="btn-movie" class="tab-btn active" onclick="switchType('movie')">الأفلام</button>
-            <button id="btn-tv" class="tab-btn" onclick="switchType('tv')">المسلسلات</button>
-        </div>
-        <div class="search-container">
-            <input type="text" id="searchInp" placeholder="ابحث عن فيلم أو مسلسل (يدعم العربي)..." oninput="debounceSearch()">
-        </div>
+    <header style="text-align:center; margin-bottom: 20px;">
+        <h1>Cinema Time TV</h1>
+        <input type="text" id="search" placeholder="Search (English)..." onkeypress="handleSearch(event)">
     </header>
+    <div class="slider" id="slider"></div>
 
-    <div class="grid" id="mainGrid"></div>
-
-    <div class="modal" id="playerModal">
-        <div class="controls-bar" id="tvControls">
-            <select id="serverSelect" onchange="updatePlayer()">
-                <option value="autoembed">سيرفر 1 (سريع جداً + ترجمة مدمجة)</option>
-                <option value="multiembed">سيرفر 2 (مستقر + ترجمة)</option>
-                <option value="smashy">سيرفر 3 (بديل قوي)</option>
-            </select>
-
-            <div id="episodeInputs" style="display: flex; align-items: center; gap: 10px;">
-                <span>الموسم:</span>
-                <input type="number" id="seasonNum" value="1" min="1">
-                <span>الحلقة:</span>
-                <input type="number" id="episodeNum" value="1" min="1">
-            </div>
-            
-            <button class="btn btn-play" onclick="updatePlayer()">▶ تشغيل / تحديث</button>
-            <button class="btn btn-close" id="closeBtn" onclick="closePlayer()">رجوع (X)</button>
+    <div class="modal" id="modal">
+        <div class="controls">
+            <input type="number" id="sNum" value="1" style="width:50px">
+            <input type="number" id="eNum" value="1" style="width:50px">
+            <button onclick="play()">Play</button>
+            <button onclick="closeModal()">Close</button>
         </div>
-        <div class="iframe-container">
-            <iframe id="videoFrame" allowfullscreen></iframe>
-        </div>
+        <iframe id="frame" allowfullscreen></iframe>
     </div>
 
     <script>
-        const TMDB_KEY = 'Fe4b6ec1a6183fddf681565506956216'; 
-        let currentType = 'movie'; 
-        let currentId = '';
-        let isModalOpen = false;
-        let searchTimeout;
+        const API_KEY = 'Fe4b6ec1a6183fddf681565506956216';
+        let currentType = 'movie', currentId = '';
 
-        // دالة جلب البيانات من TMDB مباشرة (الأسرع والأفضل)
-        async function fetchData(url) {
-            const grid = document.getElementById('mainGrid');
+        // قائمة طوارئ تشتغل دائماً لو فشل الإنترنت
+        const fallback = [
+            { id: 'tt1160419', title: 'Dune', poster: 'https://m.media-amazon.com/images/M/MV5BN2QyZGU4ZDctOWMzNS00OTc5LWEwOTctMWMxOWU5M2U5MWExXkEyXkFqcGdeQXVyMTY3ODkyNDkz._V1_.jpg' },
+            { id: 'tt1375666', title: 'Inception', poster: 'https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_.jpg' },
+            { id: 'tt0903747', title: 'Breaking Bad', poster: 'https://m.media-amazon.com/images/M/MV5BYmQ4YWMxYjUtNjZmNy00MDVmLWFhMTUtNzU0MGZiOGYzOGE1XkEyXkFqcGdeQXVyMTkxNjUyNQ@@._V1_.jpg' }
+        ];
+
+        async function loadMovies(query = '') {
+            const slider = document.getElementById('slider');
+            slider.innerHTML = 'Loading...';
             try {
-                const response = await fetch(url);
-                const data = await response.json();
-                if (data.results && data.results.length > 0) {
-                    displayItems(data.results);
-                } else {
-                    grid.innerHTML = '<p style="text-align:center; grid-column:1/-1; font-size: 1.5rem; color:#888;">لا توجد نتائج.</p>';
-                }
-            } catch (error) {
-                grid.innerHTML = '<p style="text-align:center; grid-column:1/-1; font-size: 1.5rem; color:#e50914;">تأكد من اتصالك بالإنترنت.</p>';
-            }
-        }
-
-        // جلب المحتوى الرائج (Trending)
-        function loadTrending() {
-            document.getElementById('mainGrid').innerHTML = '<p style="text-align:center; grid-column:1/-1; font-size: 1.5rem; color:#888;">جاري تحميل أحدث العروض...</p>';
-            // يدعم اللغة العربية للبوسترات والأسماء
-            fetchData(`https://api.themoviedb.org/3/trending/${currentType}/week?api_key=${TMDB_KEY}&language=ar`);
-        }
-
-        function debounceSearch() {
-            clearTimeout(searchTimeout);
-            const query = document.getElementById('searchInp').value.trim();
-            if (!query) { loadTrending(); return; }
-            
-            searchTimeout = setTimeout(() => {
-                document.getElementById('mainGrid').innerHTML = '<p style="text-align:center; grid-column:1/-1; font-size: 1.5rem; color:#888;">جاري البحث...</p>';
-                fetchData(`https://api.themoviedb.org/3/search/${currentType}?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}&language=ar`);
-            }, 600);
-        }
-
-        function displayItems(items) {
-            const grid = document.getElementById('mainGrid');
-            grid.innerHTML = '';
-            
-            items.forEach(item => {
-                if(!item.poster_path) return;
+                const url = query ? `https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&query=${query}` : `https://api.themoviedb.org/3/trending/all/week?api_key=${API_KEY}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!data.results || data.results.length === 0) throw new Error();
                 
-                const title = item.title || item.name;
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.tabIndex = 0;
-                card.onclick = () => openPlayer(item.id);
-                
-                const posterUrl = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
-                
-                card.innerHTML = `
-                    <img src="${posterUrl}" alt="${title}" loading="lazy">
-                    <div class="card-info">
-                        <div class="card-title">${title}</div>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-
-            setTimeout(() => { 
-                const first = document.querySelector('.card'); 
-                if(first) first.focus(); 
-            }, 300);
-        }
-
-        function switchType(type) {
-            currentType = type;
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`btn-${type}`).classList.add('active');
-            document.getElementById('searchInp').value = '';
-            loadTrending();
-        }
-
-        function openPlayer(id) {
-            currentId = id;
-            isModalOpen = true;
-            const modal = document.getElementById('playerModal');
-            const inputs = document.getElementById('episodeInputs');
-            
-            if (currentType === 'movie') {
-                inputs.style.display = 'none';
-            } else {
-                inputs.style.display = 'flex';
-                document.getElementById('seasonNum').value = 1;
-                document.getElementById('episodeNum').value = 1;
-            }
-            
-            updatePlayer();
-            modal.style.display = 'flex';
-            document.getElementById('closeBtn').focus();
-        }
-
-        function updatePlayer() {
-            const s = document.getElementById('seasonNum').value || 1;
-            const e = document.getElementById('episodeNum').value || 1;
-            const server = document.getElementById('serverSelect').value;
-            const frame = document.getElementById('videoFrame');
-            
-            // سيرفرات مجمعة قوية جداً تفك الحجب وتدعم الترجمة
-            if (currentType === 'movie') {
-                if (server === 'autoembed') frame.src = `https://player.autoembed.cc/embed/movie/${currentId}`;
-                else if (server === 'multiembed') frame.src = `https://multiembed.mov/?video_id=${currentId}&tmdb=1`;
-                else if (server === 'smashy') frame.src = `https://player.smashy.stream/movie/${currentId}`;
-            } else {
-                if (server === 'autoembed') frame.src = `https://player.autoembed.cc/embed/tv/${currentId}/${s}/${e}`;
-                else if (server === 'multiembed') frame.src = `https://multiembed.mov/?video_id=${currentId}&tmdb=1&s=${s}&e=${e}`;
-                else if (server === 'smashy') frame.src = `https://player.smashy.stream/tv/${currentId}?s=${s}&e=${e}`;
+                slider.innerHTML = '';
+                data.results.forEach(m => {
+                    if (!m.poster_path) return;
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.tabIndex = 0;
+                    card.innerHTML = `<img src="https://image.tmdb.org/t/p/w500${m.poster_path}"><div class="card-title">${m.title || m.name}</div>`;
+                    card.onclick = () => open(m.id, m.media_type || 'movie');
+                    slider.appendChild(card);
+                });
+            } catch (e) {
+                // لو فشل الإنترنت أو الـ API، نشغل قائمة الطوارئ
+                console.log("Using fallback");
+                slider.innerHTML = '';
+                fallback.forEach(m => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.tabIndex = 0;
+                    card.innerHTML = `<img src="${m.poster}"><div class="card-title">${m.title}</div>`;
+                    card.onclick = () => open(m.id, 'movie');
+                    slider.appendChild(card);
+                });
             }
         }
 
-        function closePlayer() {
-            isModalOpen = false;
-            document.getElementById('playerModal').style.display = 'none';
-            document.getElementById('videoFrame').src = '';
-            setTimeout(() => { const active = document.querySelector('.card:focus') || document.querySelector('.card'); if(active) active.focus(); }, 100);
+        function open(id, type) {
+            currentId = id; currentType = type;
+            document.getElementById('modal').style.display = 'block';
+            play();
         }
 
-        // نظام تنقل ذكي لريموت التلفزيون
-        document.addEventListener('keydown', function(e) {
-            const active = document.activeElement;
-            if ((e.key === 'Backspace' || e.key === 'Escape') && isModalOpen) {
-                if(active.tagName === 'INPUT') return;
-                closePlayer(); return;
-            }
-            if (!isModalOpen) {
-                const elements = Array.from(document.querySelectorAll('.card, .tab-btn, input'));
-                const index = elements.indexOf(active);
-                if (index > -1) {
-                    let nextActive;
-                    const grid = document.getElementById('mainGrid');
-                    const columns = window.getComputedStyle(grid).getPropertyValue('grid-template-columns').split(' ').length;
-                    
-                    if (e.key === 'ArrowRight') nextActive = elements[index - 1] || elements[elements.length - 1];
-                    else if (e.key === 'ArrowLeft') nextActive = elements[index + 1] || elements[0];
-                    else if (e.key === 'ArrowDown') nextActive = elements[index + columns] || active;
-                    else if (e.key === 'ArrowUp') nextActive = elements[index - columns] || document.getElementById('searchInp');
-                    else if (e.key === 'Enter' && active.tagName !== 'INPUT') active.click();
-                    
-                    if (nextActive) { 
-                        e.preventDefault(); 
-                        nextActive.focus(); 
-                        if(nextActive.classList.contains('card')) {
-                            nextActive.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
-                    }
-                }
-            }
-        });
+        function play() {
+            const s = document.getElementById('sNum').value, e = document.getElementById('eNum').value;
+            const frame = document.getElementById('frame');
+            if (currentType === 'movie') frame.src = `https://vidsrc.to/embed/movie/${currentId}`;
+            else frame.src = `https://vidsrc.to/embed/tv/${currentId}/${s}/${e}`;
+        }
 
-        // التشغيل التلقائي
-        loadTrending();
+        function closeModal() { document.getElementById('modal').style.display = 'none'; }
+        function handleSearch(e) { if (e.key === 'Enter') loadMovies(e.target.value); }
+
+        loadMovies();
     </script>
 </body>
 </html>
