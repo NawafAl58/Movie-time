@@ -46,7 +46,7 @@
         .movie-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; }
         .movie-card { position: relative; border-radius: 6px; overflow: hidden; cursor: pointer; aspect-ratio: 2/3; background-color: #222; transition: transform 0.2s; }
         .movie-card:hover { transform: scale(1.05); z-index: 2; }
-        .movie-card img { width: 100%; height: 100%; object-fit: cover; }
+        .movie-card img { width: 100%; height: 100%; object-fit: cover; background: #222; }
         
         .movie-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -103,20 +103,19 @@
     </footer>
 
     <script>
-        const IMG_URL = 'https://image.tmdb.org/t/p/w500';
+        // استخدام سيرفر صور وسيط ومفتوح لتخطي حجب الجوالات
+        const IMG_URL = 'https://images.weserv.nl/?url=https://image.tmdb.org/t/p/w500';
 
         window.onload = function() {
             getTrendingMovies();
         }
 
-        // جلب الأفلام عبر سيرفر وسيط خارجي ومفتوح لضمان عدم الحجب على الجوال
         async function getTrendingMovies() {
             try {
                 const res = await fetch('https://api.themoviedb.org/3/trending/movie/week?api_key=84a601267bbf0800c25a5857fa231e32&language=ar');
                 const data = await res.json();
                 displayMovies(data.results);
             } catch (error) {
-                // خطة بديلة فورية ببيانات ثابتة دقيقة في حال انقطع الاتصال تماماً
                 const backupData = [
                     { id: 519182, title: "Despicable Me 4", poster_path: "/w9kR8qbmQ0w606vMTm6K60vXwue.jpg", vote_average: 8.1, release_date: "2024" },
                     { id: 1022789, title: "Inside Out 2", poster_path: "/vpnVM9B6mSbaRK8gZ6SscHLHM4G.jpg", vote_average: 8.4, release_date: "2024" },
@@ -134,10 +133,14 @@
             movies.forEach(movie => {
                 if(!movie.poster_path) return;
 
+                // تنظيف مسار الصورة وربطه بالخادم الوسيط المفتوح
+                const purePosterPath = movie.poster_path.replace(/^\//, '');
+                const finalImgSrc = `https://images.weserv.nl/?url=image.tmdb.org/t/p/w500/${purePosterPath}`;
+
                 const card = document.createElement('div');
                 card.className = 'movie-card';
                 card.innerHTML = `
-                    <img src="${IMG_URL + movie.poster_path}" alt="${movie.title || movie.name}">
+                    <img src="${finalImgSrc}" alt="${movie.title || movie.name}" onerror="this.src='https://via.placeholder.com/160x240/222/fff?text=Cinema'">
                     <div class="movie-overlay">
                         <div class="movie-card-title">${movie.title || movie.name}</div>
                         <div class="movie-card-meta">
