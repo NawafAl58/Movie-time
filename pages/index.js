@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Script from 'next/script';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -66,7 +65,6 @@ export default function Home({ trendingMovies, trendingShows }) {
     setSelectedGenre('all');
   }, [activeTab, searchQuery]);
 
-  // التركيز التلقائي على المشغل عند فتح الفيلم عشان يسهل التحكم بالريموت
   useEffect(() => {
     if (selectedMedia && playerRef.current) {
       playerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -87,13 +85,11 @@ export default function Home({ trendingMovies, trendingShows }) {
     currentItems = activeTab === 'movies' ? trendingMovies : trendingShows;
   }
 
-  // تحديث السيرفر إلى vidsrc.to الأكثر استقراراً ودعماً للشاشات
   const getStreamUrl = (item) => {
     const type = activeTab === 'movies' ? 'movie' : 'tv';
     return `https://vidsrc.to/embed/${type}/${item.id}`;
   };
 
-  // دالة ذكية لمعالجة ضغطات أزرار ريموت التلفزيون (زر الـ OK أو Enter)
   const handleKeyDown = (e, item) => {
     if (e.key === 'Enter' || e.keyCode === 13) {
       e.preventDefault();
@@ -104,13 +100,7 @@ export default function Home({ trendingMovies, trendingShows }) {
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px', direction: 'ltr', display: 'flex', flexDirection: 'column' }}>
       
-      <Script 
-        src="https://pl29780684.effectivecpmnetwork.com/f311701da8f9ede7945e2f4e63498d76/invoke.js" 
-        strategy="afterInteractive"
-      />
-
       <style jsx global>{`
-        /* تأثيرات حركة الريموت عند تحديد العناصر لتسهيل التصفح على التلفزيون */
         .tv-focusable:focus {
           outline: none !important;
           border: 3px solid #e50914 !important;
@@ -168,8 +158,8 @@ export default function Home({ trendingMovies, trendingShows }) {
           </div>
         </header>
 
-        {/* شريط التصنيفات */}
-        <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '20px', scrollbarWidth: 'none' }}>
+        {/* shريط التصنيفات */}
+        <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '25px', scrollbarWidth: 'none' }}>
           {GENRES.map((genre) => (
             <button
               key={genre.id}
@@ -194,12 +184,7 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* حاوية الإعلان */}
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: '30px' }}>
-          <div id="container-f311701da8f9ede7945e2f4e63498d76" style={{ width: '100%', maxWidth: '1200px', minHeight: '90px' }}></div>
-        </div>
-
-        {/* مشغل الفيديو الذكي */}
+        {/* مشغل الفيديو */}
         {selectedMedia && (
           <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '10px', borderRadius: '12px', border: '2px solid #e50914' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
@@ -230,10 +215,10 @@ export default function Home({ trendingMovies, trendingShows }) {
               {currentItems.map((item) => (
                 <div 
                   key={item.id} 
-                  tabIndex="0" // تفعيل التركيز بالريموت
-                  className="tv-focusable" // كلاس التلفزيون المخصص
+                  tabIndex="0" 
+                  className="tv-focusable" 
                   onClick={() => setSelectedMedia(item)}
-                  onKeyDown={(e) => handleKeyDown(e, item)} // تشغيل الفيلم عند ضغط OK بالريموت
+                  onKeyDown={(e) => handleKeyDown(e, item)} 
                   style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: selectedMedia?.id === item.id ? '2px solid #e50914' : '1px solid #222', cursor: 'pointer', transition: 'transform 0.1s' }}
                 >
                   <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Poster'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
