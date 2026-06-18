@@ -9,9 +9,6 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="ar">
-      <head>
-        <script src="https://cdn.tailwindcss.com"></script>
-      </head>
       <body>{children}</body>
     </html>
   );
