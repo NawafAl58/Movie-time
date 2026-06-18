@@ -5,6 +5,17 @@ const API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w500';
 
+// قائمة التصنيفات المدعومة مع أرقام الـ ID الخاصة بها من TMDB
+const GENRES = [
+  { id: 'all', name: 'Trending 🔥' },
+  { id: '28', name: 'Action 💥' },
+  { id: '27', name: 'Horror 👻' },
+  { id: '35', name: 'Comedy 😂' },
+  { id: '10749', name: 'Romance ❤️' },
+  { id: '878', name: 'Sci-Fi 🚀' },
+  { id: '18', name: 'Drama 🎭' }
+];
+
 export async function getServerSideProps() {
   try {
     const [moviesRes, showsRes] = await Promise.all([
@@ -31,31 +42,49 @@ export default function Home({ trendingMovies, trendingShows }) {
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [selectedGenre, setSelectedGenre] = useState('all');
+  const [genreItems, setGenreItems] = useState([]);
 
+  // جلب محتوى التصنيف المحدد تلقائياً عند تغييره
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setSearchResults([]);
-      setIsSearching(false);
+    if (selectedGenre === 'all') {
+      setGenreItems([]);
       return;
     }
 
-    const delayDebounceFn = setTimeout(async () => {
-      setIsSearching(true);
+    const fetchGenreData = async () => {
       try {
         const type = activeTab === 'movies' ? 'movie' : 'tv';
-        const res = await fetch(`${BASE_URL}/search/${type}?api_key=${API_KEY}&query=${encodeURIComponent(searchQuery)}&language=en-US`);
+        const res = await fetch(`${BASE_URL}/discover/${type}?api_key=${API_KEY}&with_genres=${selectedGenre}&sort_by=popularity.desc&language=en-US`);
         const data = await res.json();
-        setSearchResults(data.results || []);
+        setGenreItems(data.results || []);
       } catch (error) {
-        console.error("Search error:", error);
+        console.error("Genre fetch error:", error);
       }
-    }, 500);
+    };
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, activeTab]);
+    fetchGenreData();
+  }, [selectedGenre, activeTab]);
 
-  const currentItems = searchQuery.trim() !== '' ? searchResults : (activeTab === 'movies' ? trendingMovies : trendingShows);
+  // تصفير الأقسام عند البحث أو تغيير نوع المحتوى
+  useEffect(() => {
+    setSelectedGenre('all');
+  }, [activeTab, searchQuery]);
+
+  // تحديد ما يتم عرضه للمستخدم حالياً
+  let currentItems = [];
+  let sectionTitle = `Trending ${activeTab === 'movies' ? 'Movies' : 'TV Shows'}`;
+
+  if (searchQuery.trim() !== '') {
+    currentItems = searchResults;
+    sectionTitle = `Search Results for "${searchQuery}"`;
+  } else if (selectedGenre !== 'all') {
+    currentItems = genreItems;
+    const genreObj = GENRES.find(g => g.id === selectedGenre);
+    sectionTitle = `${genreObj ? genreObj.name : ''} - ${activeTab === 'movies' ? 'Movies' : 'TV Shows'}`;
+  } else {
+    currentItems = activeTab === 'movies' ? trendingMovies : trendingShows;
+  }
 
   const getStreamUrl = (item) => {
     const type = activeTab === 'movies' ? 'movie' : 'tv';
@@ -65,7 +94,7 @@ export default function Home({ trendingMovies, trendingShows }) {
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '30px', direction: 'ltr', display: 'flex', flexDirection: 'column' }}>
       
-      {/* كود السكربت الإعلاني */}
+      {/* سكربت الإعلان ليعمل في الخلفية */}
       <Script 
         src="https://pl29780684.effectivecpmnetwork.com/f311701da8f9ede7945e2f4e63498d76/invoke.js" 
         strategy="afterInteractive"
@@ -73,7 +102,7 @@ export default function Home({ trendingMovies, trendingShows }) {
 
       <div style={{ flex: 1 }}>
         {/* هيدر المنصة */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '20px', borderBottom: '2px solid #111', alignItems: 'center', marginBottom: '30px', flexWrap: 'wrap', gap: '20px' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '20px', borderBottom: '2px solid #111', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '20px' }}>
           <h1 style={{ color: '#e50914', fontSize: '36px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
           
           {/* خانة البحث */}
@@ -94,16 +123,16 @@ export default function Home({ trendingMovies, trendingShows }) {
             )}
           </div>
 
-          {/* أزرار التنقل */}
+          {/* أزرار التنقل بين أفلام ومسلسلات */}
           <div style={{ display: 'flex', gap: '20px' }}>
             <button 
-              onClick={() => { setActiveTab('movies'); setSelectedMedia(null); setSearchQuery(''); }}
+              onClick={() => { setActiveTab('movies'); setSelectedMedia(null); }}
               style={{ backgroundColor: activeTab === 'movies' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '12px 30px', fontSize: '18px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}
             >
               Movies
             </button>
             <button 
-              onClick={() => { setActiveTab('shows'); setSelectedMedia(null); setSearchQuery(''); }}
+              onClick={() => { setActiveTab('shows'); setSelectedMedia(null); }}
               style={{ backgroundColor: activeTab === 'shows' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '12px 30px', fontSize: '18px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}
             >
               TV Shows
@@ -111,7 +140,31 @@ export default function Home({ trendingMovies, trendingShows }) {
           </div>
         </header>
 
-        {/* حاوية الإعلان الخاص بك */}
+        {/* شريط التصنيفات الجديد (Horror, Action, etc.) */}
+        <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '25px', scrollbarWidth: 'none' }}>
+          {GENRES.map((genre) => (
+            <button
+              key={genre.id}
+              onClick={() => { setSelectedGenre(genre.id); setSelectedMedia(null); }}
+              style={{
+                backgroundColor: selectedGenre === genre.id ? '#white' : '#111',
+                color: selectedGenre === genre.id ? '#000' : '#fff',
+                border: '1px solid #222',
+                padding: '10px 22px',
+                fontSize: '15px',
+                fontWeight: 'bold',
+                borderRadius: '20px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s'
+              }}
+            >
+              {genre.name}
+            </button>
+          ))}
+        </div>
+
+        {/* حاوية الإعلان المدمج */}
         <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: '40px' }}>
           <div id="container-f311701da8f9ede7945e2f4e63498d76" style={{ width: '100%', maxWidth: '1200px', minHeight: '90px' }}></div>
         </div>
@@ -131,12 +184,10 @@ export default function Home({ trendingMovies, trendingShows }) {
 
         {/* عرض المحتوى */}
         <main>
-          <h2 style={{ fontSize: '26px', marginBottom: '25px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            {searchQuery.trim() !== '' ? `Search Results for "${searchQuery}"` : `Trending ${activeTab === 'movies' ? 'Movies' : 'TV Shows'}`}
-          </h2>
+          <h2 style={{ fontSize: '26px', marginBottom: '25px', textTransform: 'uppercase', letterSpacing: '1px' }}>{sectionTitle}</h2>
           
           {currentItems.length === 0 ? (
-            <p style={{ color: '#666', fontSize: '18px', textAlign: 'center' }}>No results found. Try another title.</p>
+            <p style={{ color: '#666', fontSize: '18px', textAlign: 'center' }}>No results found. Try another category.</p>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '30px' }}>
               {currentItems.map((item) => (
@@ -162,8 +213,8 @@ export default function Home({ trendingMovies, trendingShows }) {
         </main>
       </div>
 
-      {/* 🔒 حقوقك الرسمية أسفل الموقع (Footer) */}
-      <footer style={{ width: '100%', textAlign: 'center', padding: '20px 0', borderTop: '1px solid #111', marginTop: '5px', fontSize: '14px', color: '#666', letterSpacing: '1px' }}>
+      {/* فوتر حقوق الملكية */}
+      <footer style={{ width: '100%', textAlign: 'center', padding: '20px 0', borderTop: '1px solid #111', marginTop: '40px', fontSize: '14px', color: '#666', letterSpacing: '1px' }}>
         Powered by <span style={{ color: '#e50914', fontWeight: 'bold' }}>N58</span> &copy; {new Date().getFullYear()}
       </footer>
 
