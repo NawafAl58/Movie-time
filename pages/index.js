@@ -3,7 +3,7 @@ import Script from 'next/script';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
-const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; // تم تقليل جودة جلب الصورة إلى w300 لتسريع تحميل البوسترات الصغيرة
+const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
 
 const GENRES = [
   { id: 'all', name: 'Trending 🔥' },
@@ -15,20 +15,32 @@ const GENRES = [
   { id: '18', name: 'Drama 🎭' }
 ];
 
+// دالة ذكية لجلب صفحات متعددة من الـ API لزيادة عدد الأفلام وتعبئة الفراغات
+async function fetchMultiplePages(urlWithoutPage, totalPages = 3) {
+  try {
+    const promises = [];
+    for (let i = 1; i <= totalPages; i++) {
+      promises.push(fetch(`${urlWithoutPage}&page=${i}`).then(res => res.json()));
+    }
+    const results = await Promise.all(promises);
+    // دمج مصفوفات الأفلام من كل الصفحات في مصفوفة واحدة كبيرة
+    return results.reduce((acc, curr) => acc.concat(curr.results || []), []);
+  } catch (error) {
+    console.error("Error fetching multiple pages:", error);
+    return [];
+  }
+}
+
 export async function getServerSideProps() {
   try {
-    const [moviesRes, showsRes] = await Promise.all([
-      fetch(`${BASE_URL}/trending/movie/week?api_key=${API_KEY}&language=en-US`),
-      fetch(`${BASE_URL}/trending/tv/week?api_key=${API_KEY}&language=en-US`)
-    ]);
-
-    const moviesData = await moviesRes.json();
-    const showsData = await showsRes.json();
+    // جلب 3 صفحات كاملة للـ Trending (حوالي 60 فيلم ومسلسل)
+    const moviesData = await fetchMultiplePages(`${BASE_URL}/trending/movie/week?api_key=${API_KEY}&language=en-US`);
+    const showsData = await fetchMultiplePages(`${BASE_URL}/trending/tv/week?api_key=${API_KEY}&language=en-US`);
 
     return { 
       props: { 
-        trendingMovies: moviesData.results || [], 
-        trendingShows: showsData.results || [] 
+        trendingMovies: moviesData, 
+        trendingShows: showsData 
       } 
     };
   } catch (error) {
@@ -51,14 +63,10 @@ export default function Home({ trendingMovies, trendingShows }) {
     }
 
     const fetchGenreData = async () => {
-      try {
-        const type = activeTab === 'movies' ? 'movie' : 'tv';
-        const res = await fetch(`${BASE_URL}/discover/${type}?api_key=${API_KEY}&with_genres=${selectedGenre}&sort_by=popularity.desc&language=en-US`);
-        const data = await res.json();
-        setGenreItems(data.results || []);
-      } catch (error) {
-        console.error("Genre fetch error:", error);
-      }
+      // جلب 3 صفحات كاملة للتصنيف المحدد لتعبئة الشاشة بالكامل
+      const type = activeTab === 'movies' ? 'movie' : 'tv';
+      const data = await fetchMultiplePages(`${BASE_URL}/discover/${type}?api_key=${API_KEY}&with_genres=${selectedGenre}&sort_by=popularity.desc&language=en-US`);
+      setGenreItems(data);
     };
 
     fetchGenreData();
@@ -159,7 +167,7 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* حاوية الإعلان المدمج */}
+        {/* حاوية الإعلان */}
         <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: '30px' }}>
           <div id="container-f311701da8f9ede7945e2f4e63498d76" style={{ width: '100%', maxWidth: '1200px', minHeight: '90px' }}></div>
         </div>
@@ -177,14 +185,13 @@ export default function Home({ trendingMovies, trendingShows }) {
           </div>
         )}
 
-        {/* عرض المحتوى المُرتب والأصغر (تحديث الـ Grid والـ Dimensions) */}
+        {/* عرض المحتوى الكثيف والمكتمل */}
         <main>
           <h2 style={{ fontSize: '22px', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px' }}>{sectionTitle}</h2>
           
           {currentItems.length === 0 ? (
             <p style={{ color: '#666', fontSize: '16px', textAlign: 'center' }}>No results found. Try another category.</p>
           ) : (
-            // تم تغيير minmax إلى 140px لزيادة عدد الأفلام المعروضة في السطر الواحد بشكل مرتب
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
               {currentItems.map((item) => (
                 <div 
@@ -194,7 +201,6 @@ export default function Home({ trendingMovies, trendingShows }) {
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                   onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                 >
-                  {/* تم تقليل الارتفاع إلى 210px ليتناسب مع العرض الجديد */}
                   <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Poster'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
                   <div style={{ padding: '10px' }}>
                     <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 6px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title || item.name}</h4>
