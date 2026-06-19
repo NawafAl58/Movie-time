@@ -184,7 +184,7 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* مشغل الفيديو */}
+        {/* مشغل الفيديو المطور للتلفزيون */}
         {selectedMedia && (
           <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '10px', borderRadius: '12px', border: '2px solid #e50914' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
@@ -192,14 +192,38 @@ export default function Home({ trendingMovies, trendingShows }) {
               <button 
                 tabIndex="0"
                 className="btn-tv-focusable"
-                onClick={() => setSelectedMedia(null)} 
+                onClick={(e) => { e.stopPropagation(); setSelectedMedia(null); }} 
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.stopPropagation(); setSelectedMedia(null); }
+                }}
                 style={{ backgroundColor: '#333', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}
               >
                 Close Player ✕
               </button>
             </div>
-            <div style={{ width: '100%', height: '55vh' }}>
-              <iframe src={getStreamUrl(selectedMedia)} style={{ width: '100%', height: '100%', border: 'none', borderRadius: '8px' }} allowFullScreen scrolling="no"></iframe>
+
+            <div 
+              tabIndex="0" 
+              className="tv-focusable" 
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.keyCode === 13) {
+                  e.preventDefault();
+                  const iframe = document.getElementById('tv-player');
+                  if (iframe) {
+                    iframe.focus();
+                    iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+                  }
+                }
+              }}
+              style={{ width: '100%', height: '55vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.1s' }}
+            >
+              <iframe 
+                id="tv-player"
+                src={getStreamUrl(selectedMedia)} 
+                style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'auto' }} 
+                allowFullScreen 
+                scrolling="no"
+              ></iframe>
             </div>
           </div>
         )}
