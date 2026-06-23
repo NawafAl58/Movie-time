@@ -48,6 +48,27 @@ export default function Home({ trendingMovies, trendingShows }) {
   
   const playerRef = useRef(null);
 
+  // 🔍 تأثير البحث التلقائي الفوري للافلام والمسلسلات
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setSearchResults([]);
+      return;
+    }
+    const delayDebounceFn = setTimeout(async () => {
+      const type = activeTab === 'movies' ? 'movie' : 'tv';
+      try {
+        const res = await fetch(`${BASE_URL}/search/${type}?api_key=${API_KEY}&query=${encodeURIComponent(searchQuery)}&language=en-US&page=1`);
+        const data = await res.json();
+        setSearchResults(data.results || []);
+      } catch (err) {
+        console.error("Search error:", err);
+      }
+    }, 400); // إرسال الطلب بعد 400 ملم من التوقف عن الكتابة لتخفيف الضغط
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, activeTab]);
+
+  // جلب البيانات حسب التصنيف
   useEffect(() => {
     if (selectedGenre === 'all') {
       setGenreItems([]);
@@ -90,13 +111,6 @@ export default function Home({ trendingMovies, trendingShows }) {
     return `https://vidsrc.to/embed/${type}/${item.id}`;
   };
 
-  const handleKeyDown = (e, item) => {
-    if (e.key === 'Enter' || e.keyCode === 13) {
-      e.preventDefault();
-      setSelectedMedia(item);
-    }
-  };
-
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px', direction: 'ltr', display: 'flex', flexDirection: 'column' }}>
       
@@ -118,17 +132,18 @@ export default function Home({ trendingMovies, trendingShows }) {
       `}</style>
 
       <div style={{ flex: 1 }}>
-        {/* هيدر المنصة */}
         <header style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '15px', borderBottom: '2px solid #111', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <h1 style={{ color: '#e50914', fontSize: '30px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
           
-          {/* خانة البحث */}
+          {/* خانة البحث المدعومة للريموت والتلفزيون */}
           <div style={{ position: 'relative', width: '100%', maxWidth: '350px' }}>
             <input 
               type="text" 
               placeholder={`Search...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="tv-focusable"
+              tabIndex="0"
               style={{ 
                 width: '100%', padding: '12px 18px', fontSize: '15px', backgroundColor: '#141414', 
                 color: 'white', border: '2px solid #222', borderRadius: '30px', outline: 'none',
@@ -137,12 +152,11 @@ export default function Home({ trendingMovies, trendingShows }) {
             />
           </div>
 
-          {/* أزرار التنقل */}
           <div style={{ display: 'flex', gap: '15px' }}>
             <button 
               tabIndex="0"
               className="btn-tv-focusable"
-              onClick={() => { setActiveTab('movies'); setSelectedMedia(null); }}
+              onClick={() => { setActiveTab('movies'); setSelectedMedia(null); setSearchQuery(''); }}
               style={{ backgroundColor: activeTab === 'movies' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.1s' }}
             >
               Movies
@@ -150,7 +164,7 @@ export default function Home({ trendingMovies, trendingShows }) {
             <button 
               tabIndex="0"
               className="btn-tv-focusable"
-              onClick={() => { setActiveTab('shows'); setSelectedMedia(null); }}
+              onClick={() => { setActiveTab('shows'); setSelectedMedia(null); setSearchQuery(''); }}
               style={{ backgroundColor: activeTab === 'shows' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.1s' }}
             >
               TV Shows
@@ -158,7 +172,6 @@ export default function Home({ trendingMovies, trendingShows }) {
           </div>
         </header>
 
-        {/* shريط التصنيفات */}
         <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '25px', scrollbarWidth: 'none' }}>
           {GENRES.map((genre) => (
             <button
@@ -184,7 +197,7 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* مشغل الفيديو المطور للتلفزيون */}
+        {/* 📺 مشغل الفيديو المطور لاستقبال الفوكس من الريموت */}
         {selectedMedia && (
           <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '10px', borderRadius: '12px', border: '2px solid #e50914' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
@@ -228,7 +241,6 @@ export default function Home({ trendingMovies, trendingShows }) {
           </div>
         )}
 
-        {/* شبكة عرض الأفلام */}
         <main>
           <h2 style={{ fontSize: '22px', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px' }}>{sectionTitle}</h2>
           
@@ -242,7 +254,12 @@ export default function Home({ trendingMovies, trendingShows }) {
                   tabIndex="0" 
                   className="tv-focusable" 
                   onClick={() => setSelectedMedia(item)}
-                  onKeyDown={(e) => handleKeyDown(e, item)} 
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.keyCode === 13) {
+                      e.preventDefault();
+                      setSelectedMedia(item);
+                    }
+                  }} 
                   style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: selectedMedia?.id === item.id ? '2px solid #e50914' : '1px solid #222', cursor: 'pointer', transition: 'transform 0.1s' }}
                 >
                   <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Poster'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
