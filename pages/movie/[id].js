@@ -36,7 +36,7 @@ export default function MovieDetail({ movieData }) {
 
     const updateMovieLanguage = async () => {
       if (!movieData) return;
-      if (movieData.original_language === 'ar') {
+      if (movieData.original_language === 'ar' || movieData.origin_country?.includes('SA')) {
         const arRes = await fetch(`${BASE_URL}/${mediaType}/${movieData.id}?api_key=${API_KEY}&language=ar-SA`);
         const arData = await arRes.json();
         arData.media_type_fixed = mediaType;
@@ -60,11 +60,13 @@ export default function MovieDetail({ movieData }) {
       setIsLoading(true);
       setUseFallback(false);
       
-      if (movie.original_language === 'ar') {
+      // 🚨 الحل الجذري للمحتوى العربي والسعودي:
+      // دمج سيرفرات عربية متخصصة تبحث بالـ ID مباشرة وتجلب الأفلام والمسلسلات الخليجية والسعودية
+      if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
         const arabicServers = [
-          `https://autoembed.to/${mediaType}/tmdb/${movie.id}`,
-          `https://embed.su/embed/${mediaType}/${movie.id}`,
-          `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`
+          `https://vidapi.stream/embed/${mediaType}/${movie.id}`, 
+          `https://arabembed.org/embed/${mediaType}/${movie.id}`,
+          `https://autoembed.to/${mediaType}/tmdb/${movie.id}`
         ];
         setStreamUrl(arabicServers[arabicServerIndex]);
         setUseFallback(true);
@@ -72,6 +74,7 @@ export default function MovieDetail({ movieData }) {
         return;
       }
 
+      // للأفلام الأجنبية: البحث في التورنت كالعادة
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
       const fallbackUrl = `https://vidsrc.to/embed/${mediaType}/${movie.id}`;
@@ -179,12 +182,12 @@ export default function MovieDetail({ movieData }) {
       </div>
 
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
-        <div style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
           <h3 style={{ fontSize: '18px', margin: 0 }}>
-            {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? `📺 يتم التشغيل عبر سيرفر احتياطي معزول وآمن` : `📺 Playing via Secured Standby Server`) : '💎 Now Playing Premium 4K (Debrid)'}
+            {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? `📺 يتم التشغيل عبر سيرفر عربي آمن ومحمي` : `📺 Playing via Secured Arabic Server`) : '💎 Now Playing Premium 4K (Debrid)'}
           </h3>
           
-          {movie.original_language === 'ar' && !isLoading && (
+          {(movie.original_language === 'ar' || movie.origin_country?.includes('SA')) && !isLoading && (
             <button 
               onClick={() => setArabicServerIndex((prev) => (prev + 1) % 3)}
               style={{ backgroundColor: '#111', color: '#e50914', border: '1px solid #e50914', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
@@ -198,7 +201,7 @@ export default function MovieDetail({ movieData }) {
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
           ) : useFallback ? (
-            /* 🛡️ تم حقن جدار الحماية sandbox هنا لمنع النوافذ الخبيثة تماماً */
+            /* 🛡️ حماية Sandbox الحديدية الصارمة لمنع الفيروسات والنوافذ تماماً وعزل المشغل */
             <iframe 
               src={streamUrl} 
               style={{ width: '100%', height: '100%', border: 'none' }} 
