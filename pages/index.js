@@ -54,7 +54,7 @@ export async function getServerSideProps() {
 }
 
 export default function Home({ initialMovies, initialShows }) {
-  const [lang, setLang] = useState('en'); // اللغة الافتراضية إنجليزي
+  const [lang, setLang] = useState('en'); 
   const [activeTab, setActiveTab] = useState('movies'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -63,7 +63,6 @@ export default function Home({ initialMovies, initialShows }) {
   const [trendingMovies, setTrendingMovies] = useState(initialMovies);
   const [trendingShows, setTrendingShows] = useState(initialShows);
 
-  // حفظ واسترجاع اللغة المفضلة للمستخدم
   useEffect(() => {
     const savedLang = localStorage.getItem('site_lang');
     if (savedLang) setLang(savedLang);
@@ -75,21 +74,17 @@ export default function Home({ initialMovies, initialShows }) {
     setSearchQuery('');
   };
 
-  // تحديث القائمة الرئيسية عند تغيير اللغة
   useEffect(() => {
     const refreshTrending = async () => {
       const currentLang = lang === 'ar' ? 'ar-SA' : 'en-US';
       const movies = await fetchMultiplePages(`${BASE_URL}/trending/movie/week?api_key=${API_KEY}&language=${currentLang}`);
       const shows = await fetchMultiplePages(`${BASE_URL}/trending/tv/week?api_key=${API_KEY}&language=${currentLang}`);
-      
-      // نظام الفلترة الذكي: لو اللغة إنجليزي، نترك المحتوى العربي باسمه المترجم/الأصلي العربي إن وجد
       setTrendingMovies(movies);
       setTrendingShows(shows);
     };
     refreshTrending();
   }, [lang]);
 
-  // 🔍 البحث التلقائي الفوري المدعوم باللغة المتغيرة
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setSearchResults([]);
@@ -110,7 +105,6 @@ export default function Home({ initialMovies, initialShows }) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, activeTab, lang]);
 
-  // جلب التصنيفات مع حماية دقيقة للمحتوى العربي
   useEffect(() => {
     if (selectedGenre === 'all') {
       setGenreItems([]);
@@ -122,7 +116,6 @@ export default function Home({ initialMovies, initialShows }) {
       if (selectedGenre === 'arabic_movies') type = 'movie';
       if (selectedGenre === 'arabic_shows') type = 'tv';
 
-      // الأفلام والمسلسلات العربية تُجلب دائماً بـ ar-SA حتى لو كان الموقع بالإنجليزية
       const isArabicGenre = selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows';
       const currentLang = isArabicGenre ? 'ar-SA' : (lang === 'ar' ? 'ar-SA' : 'en-US');
 
@@ -163,17 +156,28 @@ export default function Home({ initialMovies, initialShows }) {
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px', direction: lang === 'ar' ? 'rtl' : 'ltr', display: 'flex', flexDirection: 'column' }}>
       
+      {/* 🚨 حل مشكلة الحواف البيضاء جذرياً */}
       <style jsx global>{`
-        html, body { margin: 0 !important; padding: 0 !important; background-color: #050505 !important; }
+        html, body, #__next {
+          margin: 0 !important;
+          padding: 0 !important;
+          background-color: #050505 !important;
+          background: #050505 !important;
+        }
         .tv-focusable:focus { outline: none !important; border: 3px solid #e50914 !important; transform: scale(1.04) !important; background-color: #1c1c1c !important; box-shadow: 0 0 15px #e50914; }
         .btn-tv-focusable:focus { outline: none !important; background-color: #e50914 !important; color: white !important; transform: scale(1.1) !important; box-shadow: 0 0 10px #e50914; }
       `}</style>
 
       <div style={{ flex: 1 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '15px', borderBottom: '2px solid #111', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-          <h1 style={{ color: '#e50914', fontSize: '30px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
+          <div>
+            <h1 style={{ color: '#e50914', fontSize: '30px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
+            {/* 👑 الحقوق فوق تحت العنوان مباشرة */}
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '2px', fontWeight: 'bold', letterSpacing: '1px' }}>
+              BY: NAWAF AL-NAZAWI
+            </div>
+          </div>
           
-          {/* 🌐 زر تبديل اللغة الذكي في الهيدر */}
           <div style={{ display: 'flex', gap: '5px', backgroundColor: '#141414', padding: '4px', borderRadius: '20px', border: '1px solid #222' }}>
             <button className="btn-tv-focusable" onClick={() => toggleLanguage('en')} style={{ padding: '6px 15px', fontSize: '12px', fontWeight: 'bold', borderRadius: '15px', border: 'none', cursor: 'pointer', backgroundColor: lang === 'en' ? '#e50914' : 'transparent', color: 'white' }}>English</button>
             <button className="btn-tv-focusable" onClick={() => toggleLanguage('ar')} style={{ padding: '6px 15px', fontSize: '12px', fontWeight: 'bold', borderRadius: '15px', border: 'none', cursor: 'pointer', backgroundColor: lang === 'ar' ? '#e50914' : 'transparent', color: 'white' }}>العربية</button>
@@ -227,9 +231,7 @@ export default function Home({ initialMovies, initialShows }) {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
               {currentItems.map((item) => {
-                // فلترة وعزل ذكي: لو الفيلم عربي أصلاً والموقع إنجليزي، نفضل عرض العنوان المترجم للعربية المخزن في الكائن لمنع خلط الأسماء الأجنبية
-                const displayName = (lang === 'en' && item.original_language === 'ar') ? (item.title || item.name) : (item.title || item.name);
-                
+                const displayName = item.title || item.name;
                 return (
                   <Link href={`/movie/${item.id}`} key={item.id} legacyBehavior>
                     <div tabIndex="0" className="tv-focusable" style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', transition: 'transform 0.1s' }}>
@@ -250,8 +252,9 @@ export default function Home({ initialMovies, initialShows }) {
         </main>
       </div>
 
-      <footer style={{ width: '100%', textAlign: 'center', padding: '15px 0', borderTop: '1px solid #111', marginTop: '40px', fontSize: '12px', color: '#666', letterSpacing: '1px' }}>
-        Powered by <span style={{ color: '#e50914', fontWeight: 'bold' }}>N58</span> &copy; {new Date().getFullYear()}
+      {/* 👑 الحقوق تحت في الفوتر باسمك الكامل */}
+      <footer style={{ width: '100%', textAlign: 'center', padding: '15px 0', borderTop: '1px solid #111', marginTop: '40px', fontSize: '12px', color: '#666', letterSpacing: '1px', fontWeight: 'bold' }}>
+        Developed & Powered by <span style={{ color: '#e50914' }}>NAWAF AL-NAZAWI</span> &copy; {new Date().getFullYear()}
       </footer>
     </div>
   );
