@@ -26,7 +26,6 @@ export default function MovieDetail({ movieData }) {
   const [streamUrl, setStreamUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
-  // نظام إدارة القوائم والسيرفرات المتاحة
   const [servers, setServers] = useState([]);
   const [activeServerId, setActiveServerId] = useState('');
 
@@ -58,27 +57,28 @@ export default function MovieDetail({ movieData }) {
   useEffect(() => {
     if (!movie) return;
 
-    const buildServersList = async () => {
+    const buildFullServersList = async () => {
       setIsLoading(true);
       const list = [];
 
-      // 🚨 1. إذا كان المحتوى عربي أو سعودي
+      // 🚨 1. إذا كان المحتوى عربي أو سعودي (حقن كافة السيرفرات العربية المعروفة والمفتوحة)
       if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
-        // نحاول جلب الرابط المباشر الأصيل أولاً كخيار أول مفضل
         try {
           const response = await fetch(`https://api.vidsrc.pm/v1/${mediaType}/${movie.id}`);
           const data = await response.json();
           if (data && data.url) {
-            list.push({ id: 'native-ar', name: lang === 'ar' ? '🚀 سيرفر مباشر فائق السرعة' : '🚀 Direct Native Stream', url: data.url, type: 'video' });
+            list.push({ id: 'native-ar', name: lang === 'ar' ? '🚀 سيرفر مباشر أصيل' : '🚀 Direct Native Stream', url: data.url, type: 'video' });
           }
         } catch (e) {}
 
-        // سيرفرات الـ Embed الاحتياطية المفتوحة للعربي
-        list.push({ id: 'su-ar', name: lang === 'ar' ? '📺 سيرفر خليجي مستقر (SU)' : '📺 Stable Khaleej Server (SU)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-        list.push({ id: 'me-ar', name: lang === 'ar' ? '🌐 سيرفر عربي بديل (ME)' : '🌐 Alternative Arab Server (ME)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-        
+        list.push({ id: 'vidapi-ar', name: lang === 'ar' ? '🎬 سيرفر عربي 1 (VidApi)' : '🎬 Arab Server 1 (VidApi)', url: `https://vidapi.stream/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+        list.push({ id: 'arabembed-ar', name: lang === 'ar' ? '🍿 سيرفر عربي 2 (ArabEmbed)' : '🍿 Arab Server 2 (ArabEmbed)', url: `https://arabembed.org/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+        list.push({ id: 'autoembed-ar', name: lang === 'ar' ? '📺 سيرفر عربي 3 (AutoEmbed)' : '📺 Arab Server 3 (AutoEmbed)', url: `https://autoembed.to/${mediaType}/tmdb/${movie.id}`, type: 'iframe' });
+        list.push({ id: 'su-ar', name: lang === 'ar' ? '🌐 سيرفر عربي 4 (SU)' : '🌐 Arab Server 4 (SU)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+        list.push({ id: 'me-ar', name: lang === 'ar' ? '✨ سيرفر عربي 5 (ME)' : '✨ Arab Server 5 (ME)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+        list.push({ id: 'cc-ar', name: lang === 'ar' ? '🔥 سيرفر عربي 6 (CC)' : '🔥 Arab Server 6 (CC)', url: `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+
         setServers(list);
-        // اختيار أفضل سيرفر تلقائياً (الأول في القائمة)
         if (list.length > 0) {
           setActiveServerId(list[0].id);
           setStreamUrl(list[0].url);
@@ -87,13 +87,9 @@ export default function MovieDetail({ movieData }) {
         return;
       }
 
-      // 🌐 2. إذا كان المحتوى أجنبي (نبحث عن التورنت Premium 4K أولاً)
+      // 🌐 2. إذا كان المحتوى أجنبي (حقن السيرفرات البريميوم + كافة سيرفرات الـ Embed العالمية المفتوحة)
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
-
-      // إضافة السيرفرات الاحتياطية المفتوحة للأجنبي دائماً في القائمة
-      const fallbackSU = `https://vidsrc.su/embed/${mediaType}/${movie.id}`;
-      const fallbackME = `https://vidsrc.me/embed/${mediaType}/${movie.id}`;
 
       try {
         const searchQueries = [`${queryName} ${year} 4K`, `${queryName} ${year} 1080p`];
@@ -137,19 +133,20 @@ export default function MovieDetail({ movieData }) {
               body: new URLSearchParams({ link: finalInfo.links[0] })
             });
             const finalPremiumData = await unrestrictRes.json();
-            
-            // إضافة سيرفر ديبريد كخيار أول مفضل 4K
-            list.push({ id: 'debrid-4k', name: lang === 'ar' ? '💎 سيرفر بريميوم صـافي 4K (Debrid)' : '💎 Premium 4K Stream (Debrid)', url: finalPremiumData.download, type: 'video' });
+            list.push({ id: 'debrid-4k', name: lang === 'ar' ? '💎 سيرفر بريميوم صافي 4K (Debrid)' : '💎 Premium 4K Stream (Debrid)', url: finalPremiumData.download, type: 'video' });
           }
         }
       } catch (err) {}
 
-      // إضافة السيرفرات المفتوحة للقائمة
-      list.push({ id: 'vidsrc-su', name: lang === 'ar' ? '🎬 سيرفر رئيسي عالي الجودة (SU)' : '🎬 Main High Quality (SU)', url: fallbackSU, type: 'iframe' });
-      list.push({ id: 'vidsrc-me', name: lang === 'ar' ? '🍿 سيرفر احتياطي سريع (ME)' : '🍿 Fast Backup Stream (ME)', url: fallbackME, type: 'iframe' });
+      // ترسانة السيرفرات الأجنبية العالمية الكاملة
+      list.push({ id: 'vidsrc-su', name: 'Server SU (Multi-Lang)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+      list.push({ id: 'vidsrc-to', name: 'Server TO (Auto-Subs)', url: `https://vidsrc.to/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+      list.push({ id: 'vidsrc-me', name: 'Server ME (Fast Load)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+      list.push({ id: 'vidsrc-cc', name: 'Server CC (Backup HQ)', url: `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+      list.push({ id: 'autoembed-global', name: 'Server AutoEmbed', url: `https://autoembed.to/${mediaType}/tmdb/${movie.id}`, type: 'iframe' });
+      list.push({ id: 'vidapi-global', name: 'Server VidApi Stream', url: `https://vidapi.stream/embed/${mediaType}/${movie.id}`, type: 'iframe' });
 
       setServers(list);
-      // الاختيار التلقائي لأفضل سيرفر متاح
       if (list.length > 0) {
         setActiveServerId(list[0].id);
         setStreamUrl(list[0].url);
@@ -157,10 +154,9 @@ export default function MovieDetail({ movieData }) {
       setIsLoading(false);
     };
 
-    buildServersList();
+    buildFullServersList();
   }, [movie]);
 
-  // دالة التبديل اليدوي بين السيرفرات عند ضغط المستخدم
   const handleServerChange = (serverId, serverUrl) => {
     setActiveServerId(serverId);
     setStreamUrl(serverUrl);
@@ -206,13 +202,11 @@ export default function MovieDetail({ movieData }) {
         </div>
       </div>
 
-      {/* منطقة المشغل وقائمة السيرفرات */}
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : `🍿 ${currentActiveServer?.name}`}
+          {isLoading ? (lang === 'ar' ? '🔍 جاري فحص وجلب أفضل سيرفر متاح...' : '🔍 Scanning & Selecting Best Server...') : `🍿 ${currentActiveServer?.name}`}
         </h3>
 
-        {/* 📺 مشغل الفيديو */}
         <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
@@ -233,11 +227,10 @@ export default function MovieDetail({ movieData }) {
           )}
         </div>
 
-        {/* 🎛️ أزرار قوائم السيرفرات التفاعلية */}
         {!isLoading && servers.length > 0 && (
           <div>
             <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px', fontWeight: 'bold' }}>
-              {lang === 'ar' ? 'اختر سيرفر يدوي إذا واجهت مشكلة:' : 'Select a server manually if you face issues:'}
+              {lang === 'ar' ? '🎛️ قائمة السيرفرات المتوفرة بالكامل (اختر يدوياً إذا رغبت بالتبديل):' : '🎛️ Available Servers List (Switch manually if desired):'}
             </p>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {servers.map((srv) => (
