@@ -46,8 +46,9 @@ export async function getServerSideProps() {
 export default function Home({ trendingMovies, trendingShows }) {
   const [activeTab, setActiveTab] = useState('movies'); 
   const [selectedMedia, setSelectedMedia] = useState(null);
-  const [streamUrl, setStreamUrl] = useState(''); // ◀ تخزين رابط الـ 4K البريميوم المباشر
-  const [isLoadingLink, setIsLoadingLink] = useState(false); // ◀ حالة التحميل أثناء توليد الرابط
+  const [streamUrl, setStreamUrl] = useState(''); 
+  const [useFallbackServer, setUseFallbackServer] = useState(false); // للتحويل للسيرفر القديم عند الحاجة
+  const [isLoadingLink, setIsLoadingLink] = useState(false); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedGenre, setSelectedGenre] = useState('all');
@@ -107,27 +108,40 @@ export default function Home({ trendingMovies, trendingShows }) {
     setSelectedGenre('all');
   }, [activeTab, searchQuery]);
 
-  // تأثير لجلب رابط الـ 4K البريميوم فور اختيار الفيلم أو المسلسل
+  // نظام فحص وجلب الروابط الهجين (Debrid أو السيرفر القديم)
   useEffect(() => {
     if (!selectedMedia) {
       setStreamUrl('');
+      setUseFallbackServer(false);
       return;
     }
 
     const fetchPremiumLink = async () => {
       setIsLoadingLink(true);
+      setUseFallbackServer(false);
+      
       const queryName = selectedMedia.title || selectedMedia.name;
       const year = selectedMedia.release_date?.split('-')[0] || selectedMedia.first_air_date?.split('-')[0] || '';
+      const type = activeTab === 'movies' ? 'movie' : 'tv';
+      const fallbackUrl = `https://vidsrc.to/embed/${type}/${selectedMedia.id}`;
+
+      // إذا كان التصنيف المختار محتوى عربي، نحوله مباشرة للسيرفر القديم اختصاراً للوقت لعدم توفر تورنتس لها غالباً
+      if (selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows') {
+        setStreamUrl(fallbackUrl);
+        setUseFallbackServer(true);
+        setIsLoadingLink(false);
+        return;
+      }
       
       try {
-        // 1. البحث التلقائي عن جودة 4K في التورنتس العامة
+        // 1. البحث عن جودة 4K
         const torrentSearchUrl = `https://api.apibay.org/q.php?q=${encodeURIComponent(queryName + ' ' + year + ' 4K')}`;
         const torrentRes = await fetch(torrentSearchUrl);
         const torrents = await torrentRes.json();
         
         let targetTorrent = torrents && torrents.length > 0 ? torrents[0] : null;
 
-        // خيار بديل إذا لم يجد نسخة 4K يبحث عن 1080p
+        // خيار بديل 1080p إذا لم يجد 4K
         if (!targetTorrent || targetTorrent.info_hash === "0000000000000000000000000000000000000000") {
           const fallbackRes = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(queryName + ' ' + year + ' 1080p')}`);
           const fallbackTorrents = await fallbackRes.json();
@@ -136,17 +150,17 @@ export default function Home({ trendingMovies, trendingShows }) {
           }
         }
 
+        // إذا لم يجد أي تورنت بريميوم، يحول تلقائياً للسيرفر القديم فوراً
         if (!targetTorrent || targetTorrent.info_hash === "0000000000000000000000000000000000000000") {
-          // إذا لم يجد روابط تورنت إطلاقاً، نرجع للسيرفر الإفتراضي كخيار احتياطي لضمان التشغيل دائماً
-          const type = activeTab === 'movies' ? 'movie' : 'tv';
-          setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+          setStreamUrl(fallbackUrl);
+          setUseFallbackServer(true);
           setIsLoadingLink(false);
           return;
         }
 
         const magnetLink = `magnet:?xt=urn:btih:${targetTorrent.info_hash}&dn=${encodeURIComponent(targetTorrent.name)}`;
 
-        // 2. إرسال للـ Real-Debrid لفك التشفير وتوليد الرابط المباشر العالي الجودة
+        // 2. طلب الرابط من Real-Debrid
         const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
@@ -175,14 +189,13 @@ export default function Home({ trendingMovies, trendingShows }) {
           const finalPremiumData = await unrestrictRes.json();
           setStreamUrl(finalPremiumData.download);
         } else {
-          // احتياطي
-          const type = activeTab === 'movies' ? 'movie' : 'tv';
-          setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+          setStreamUrl(fallbackUrl);
+          setUseFallbackServer(true);
         }
       } catch (err) {
         console.error("Real-Debrid error, falling back:", err);
-        const type = activeTab === 'movies' ? 'movie' : 'tv';
-        setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+        setStreamUrl(fallbackUrl);
+        setUseFallbackServer(true);
       }
       setIsLoadingLink(false);
     };
@@ -297,34 +310,56 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* 📺 مشغل الفيديو المطور بدقة 4K وصوت كامل بدون قيود الـ iframe */}
+        {/* 📺 مشغل الفيديو الهجين الذكي */}
         {selectedMedia && (
           <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
               <h3 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#fff' }}>
-                {isLoadingLink ? '🔍 Generating Premium Link...' : `💎 Now Playing (Premium): ${selectedMedia.title || selectedMedia.name}`}
+                {isLoadingLink ? '🔍 Checking Real-Debrid 4K Server...' : useFallbackServer ? `📺 Playing via Backup Server: ${selectedMedia.title || selectedMedia.name}` : `💎 Now Playing Premium 4K: ${selectedMedia.title || selectedMedia.name}`}
               </h3>
-              <button 
-                tabIndex="0"
-                className="btn-tv-focusable"
-                onClick={() => { setSelectedMedia(null); setStreamUrl(''); }} 
-                style={{ backgroundColor: '#333', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}
-              >
-                Close Player ✕
-              </button>
+              
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {/* زر يدوي إضافي يسمح لك بقلب السيرفر بنفسك لو حابب تبدل بينهم بجلسة المشاهدة! */}
+                {!isLoadingLink && (
+                  <button
+                    tabIndex="0"
+                    className="btn-tv-focusable"
+                    onClick={() => {
+                      const type = activeTab === 'movies' ? 'movie' : 'tv';
+                      if (!useFallbackServer) {
+                        setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+                        setUseFallbackServer(true);
+                      } else {
+                        setSelectedMedia({...selectedMedia}); // يعيد الفحص من جديد
+                      }
+                    }}
+                    style={{ backgroundColor: '#111', color: '#aaa', border: '1px solid #333', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    {useFallbackServer ? "🔄 Switch to 4K Debrid" : "🔄 Switch to Backup"}
+                  </button>
+                )}
+                <button 
+                  tabIndex="0"
+                  className="btn-tv-focusable"
+                  onClick={() => { setSelectedMedia(null); setStreamUrl(''); }} 
+                  style={{ backgroundColor: '#333', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Close Player ✕
+                </button>
+              </div>
             </div>
 
             <div style={{ width: '100%', height: '55vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
               {isLoadingLink ? (
                 <div style={{ textAlign: 'center', color: '#e50914' }}>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Bypassing & Fetching 4K BluRay Torrent...</div>
-                  <div style={{ fontSize: '14px', color: '#999' }}>Real-Debrid API is unrestricting your high-speed stream</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Analyzing Streaming Paths...</div>
+                  <div style={{ fontSize: '14px', color: '#999' }}>Searching high-speed 4K torrents or preparing standby servers</div>
                 </div>
-              ) : streamUrl.includes('embed') ? (
-                /* في حال لم يجد تورنت يعود تلقائياً للـ iframe كخيار احتياطي */
+              ) : useFallbackServer ? (
+                /* السيرفر الاحتياطي القديم كفو في تغطية النواقص والمسلسلات العربية */
                 <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen></iframe>
               ) : (
-                /* مشغل الفيديو الأصلي الفاخر للأفلام المباشرة والـ 4K الصوت فيه 100% طاقة */
+                /* مشغل الفيديو الأصلي الفاخر لملفات الـ 4K الصافية القادمة من Real-Debrid */
                 <video 
                   id="main-tv-player"
                   src={streamUrl} 
