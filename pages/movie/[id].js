@@ -60,8 +60,7 @@ export default function MovieDetail({ movieData }) {
       setIsLoading(true);
       setUseFallback(false);
       
-      // 🚨 الحل الجذري للمحتوى العربي والسعودي:
-      // دمج سيرفرات عربية متخصصة تبحث بالـ ID مباشرة وتجلب الأفلام والمسلسلات الخليجية والسعودية
+      // 🚨 1. مسار المحتوى العربي والسعودي الصافي
       if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
         const arabicServers = [
           `https://vidapi.stream/embed/${mediaType}/${movie.id}`, 
@@ -74,7 +73,7 @@ export default function MovieDetail({ movieData }) {
         return;
       }
 
-      // للأفلام الأجنبية: البحث في التورنت كالعادة
+      // 🌐 2. مسار المحتوى الأجنبي الصافي
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
       const fallbackUrl = `https://vidsrc.to/embed/${mediaType}/${movie.id}`;
@@ -184,7 +183,7 @@ export default function MovieDetail({ movieData }) {
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
           <h3 style={{ fontSize: '18px', margin: 0 }}>
-            {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? `📺 يتم التشغيل عبر سيرفر عربي آمن ومحمي` : `📺 Playing via Secured Arabic Server`) : '💎 Now Playing Premium 4K (Debrid)'}
+            {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? `📺 يتم التشغيل عبر سيرفر احتياطي محمي` : `📺 Playing via Secured Standby Server`) : '💎 Now Playing Premium 4K (Debrid)'}
           </h3>
           
           {(movie.original_language === 'ar' || movie.origin_country?.includes('SA')) && !isLoading && (
@@ -201,12 +200,12 @@ export default function MovieDetail({ movieData }) {
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
           ) : useFallback ? (
-            /* 🛡️ حماية Sandbox الحديدية الصارمة لمنع الفيروسات والنوافذ تماماً وعزل المشغل */
+            /* 🛡️ خيارات أمان متوازنة تمنع الاختراق وتسمح بتشغيل الفيديو دون رسائل الخطأ */
             <iframe 
               src={streamUrl} 
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen
-              sandbox="allow-scripts allow-same-origin allow-forms"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
             ></iframe>
           ) : (
             <video src={streamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
