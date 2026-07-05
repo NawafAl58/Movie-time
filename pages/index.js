@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import React, { useState, useEffect, useRef } from 'react';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
