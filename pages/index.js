@@ -47,7 +47,7 @@ export default function Home({ trendingMovies, trendingShows }) {
   const [activeTab, setActiveTab] = useState('movies'); 
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [streamUrl, setStreamUrl] = useState(''); 
-  const [useFallbackServer, setUseFallbackServer] = useState(false); // للتحويل للسيرفر القديم عند الحاجة
+  const [useFallbackServer, setUseFallbackServer] = useState(false); 
   const [isLoadingLink, setIsLoadingLink] = useState(false); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -108,7 +108,44 @@ export default function Home({ trendingMovies, trendingShows }) {
     setSelectedGenre('all');
   }, [activeTab, searchQuery]);
 
-  // نظام فحص وجلب الروابط الهجين (Debrid أو السيرفر القديم)
+  // 📡 دالة البحث المتقدمة متعددة المصادر لجلب التورنت
+  const fetchTorrentHash = async (queryName, year) => {
+    const searchQueries = [
+      `${queryName} ${year} 4K`,
+      `${queryName} ${year} 1080p`,
+      `${queryName} 4K`,
+      `${queryName} 1080p`
+    ];
+
+    // جرب البحث في المصدر الأول (Apibay)
+    for (let q of searchQueries) {
+      try {
+        const res = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(q)}`);
+        const torrents = await res.json();
+        if (torrents && torrents.length > 0 && torrents[0].info_hash !== "0000000000000000000000000000000000000000") {
+          return { hash: torrents[0].info_hash, name: torrents[0].name };
+        }
+      } catch (e) { console.log("Source 1 failed, trying next..."); }
+    }
+
+    // مصدر احتياطي سريع وثاني (YTS API للأفلام المتاحة)
+    try {
+      const res = await fetch(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(queryName)}`);
+      const data = await res.json();
+      if (data && data.data && data.data.movies && data.data.movies.length > 0) {
+        const movie = data.data.movies[0];
+        // يفضل جودة 1080p أو 2160p المتوفرة
+        const torrent = movie.torrents.find(t => t.quality === '2160p') || movie.torrents[0];
+        if (torrent && torrent.hash) {
+          return { hash: torrent.hash, name: movie.title };
+        }
+      }
+    } catch (e) { console.log("Source 2 failed."); }
+
+    return null;
+  };
+
+  // نظام فحص وجلب الروابط الهجين
   useEffect(() => {
     if (!selectedMedia) {
       setStreamUrl('');
@@ -125,7 +162,6 @@ export default function Home({ trendingMovies, trendingShows }) {
       const type = activeTab === 'movies' ? 'movie' : 'tv';
       const fallbackUrl = `https://vidsrc.to/embed/${type}/${selectedMedia.id}`;
 
-      // إذا كان التصنيف المختار محتوى عربي، نحوله مباشرة للسيرفر القديم اختصاراً للوقت لعدم توفر تورنتس لها غالباً
       if (selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows') {
         setStreamUrl(fallbackUrl);
         setUseFallbackServer(true);
@@ -134,33 +170,19 @@ export default function Home({ trendingMovies, trendingShows }) {
       }
       
       try {
-        // 1. البحث عن جودة 4K
-        const torrentSearchUrl = `https://api.apibay.org/q.php?q=${encodeURIComponent(queryName + ' ' + year + ' 4K')}`;
-        const torrentRes = await fetch(torrentSearchUrl);
-        const torrents = await torrentRes.json();
-        
-        let targetTorrent = torrents && torrents.length > 0 ? torrents[0] : null;
+        // البحث عن التورنت باستخدام النظام المتعدد الجديد
+        const torrentData = await fetchTorrentHash(queryName, year);
 
-        // خيار بديل 1080p إذا لم يجد 4K
-        if (!targetTorrent || targetTorrent.info_hash === "0000000000000000000000000000000000000000") {
-          const fallbackRes = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(queryName + ' ' + year + ' 1080p')}`);
-          const fallbackTorrents = await fallbackRes.json();
-          if (fallbackTorrents && fallbackTorrents.length > 0) {
-            targetTorrent = fallbackTorrents[0];
-          }
-        }
-
-        // إذا لم يجد أي تورنت بريميوم، يحول تلقائياً للسيرفر القديم فوراً
-        if (!targetTorrent || targetTorrent.info_hash === "0000000000000000000000000000000000000000") {
+        if (!torrentData) {
           setStreamUrl(fallbackUrl);
           setUseFallbackServer(true);
           setIsLoadingLink(false);
           return;
         }
 
-        const magnetLink = `magnet:?xt=urn:btih:${targetTorrent.info_hash}&dn=${encodeURIComponent(targetTorrent.name)}`;
+        const magnetLink = `magnet:?xt=urn:btih:${torrentData.hash}&dn=${encodeURIComponent(torrentData.name)}`;
 
-        // 2. طلب الرابط من Real-Debrid
+        // إرسال للـ Real-Debrid
         const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
@@ -310,16 +332,15 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* 📺 مشغل الفيديو الهجين الذكي */}
+        {/* 📺 مشغل الفيديو الهجين الذكي المحدث */}
         {selectedMedia && (
           <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
               <h3 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#fff' }}>
-                {isLoadingLink ? '🔍 Checking Real-Debrid 4K Server...' : useFallbackServer ? `📺 Playing via Backup Server: ${selectedMedia.title || selectedMedia.name}` : `💎 Now Playing Premium 4K: ${selectedMedia.title || selectedMedia.name}`}
+                {isLoadingLink ? '🔍 Searching Multiple 4K Torrent Streams...' : useFallbackServer ? `📺 Playing via Backup Server: ${selectedMedia.title || selectedMedia.name}` : `💎 Now Playing Premium 4K: ${selectedMedia.title || selectedMedia.name}`}
               </h3>
               
               <div style={{ display: 'flex', gap: '10px' }}>
-                {/* زر يدوي إضافي يسمح لك بقلب السيرفر بنفسك لو حابب تبدل بينهم بجلسة المشاهدة! */}
                 {!isLoadingLink && (
                   <button
                     tabIndex="0"
@@ -330,12 +351,13 @@ export default function Home({ trendingMovies, trendingShows }) {
                         setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
                         setUseFallbackServer(true);
                       } else {
-                        setSelectedMedia({...selectedMedia}); // يعيد الفحص من جديد
+                        // عند الضغط الإجباري، يعيد فحص التورنت من جديد بقوة
+                        setSelectedMedia({...selectedMedia});
                       }
                     }}
                     style={{ backgroundColor: '#111', color: '#aaa', border: '1px solid #333', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
                   >
-                    {useFallbackServer ? "🔄 Switch to 4K Debrid" : "🔄 Switch to Backup"}
+                    {useFallbackServer ? "🔄 Force 4K Debrid" : "🔄 Switch to Backup"}
                   </button>
                 )}
                 <button 
@@ -352,14 +374,12 @@ export default function Home({ trendingMovies, trendingShows }) {
             <div style={{ width: '100%', height: '55vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
               {isLoadingLink ? (
                 <div style={{ textAlign: 'center', color: '#e50914' }}>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Analyzing Streaming Paths...</div>
-                  <div style={{ fontSize: '14px', color: '#999' }}>Searching high-speed 4K torrents or preparing standby servers</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Scraping High-Speed Links...</div>
+                  <div style={{ fontSize: '14px', color: '#999' }}>Checking TorrentProject, YTS & Apibay for the ultimate 4K file</div>
                 </div>
               ) : useFallbackServer ? (
-                /* السيرفر الاحتياطي القديم كفو في تغطية النواقص والمسلسلات العربية */
                 <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen></iframe>
               ) : (
-                /* مشغل الفيديو الأصلي الفاخر لملفات الـ 4K الصافية القادمة من Real-Debrid */
                 <video 
                   id="main-tv-player"
                   src={streamUrl} 
