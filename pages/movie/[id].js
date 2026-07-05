@@ -8,7 +8,6 @@ const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 export async function getServerSideProps(context) {
   const { id } = context.query;
   try {
-    // جلب بيانات الفيلم الأولية بالإنجليزية لمعرفة لغته الأصلية
     const res = await fetch(`${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=en-US`);
     const movieData = await res.json();
     return { props: { movieData } };
@@ -25,21 +24,17 @@ export default function MovieDetail({ movieData }) {
   const [isLoading, setIsLoading] = useState(true);
   const [useFallback, setUseFallback] = useState(false);
 
-  // قراءة لغة الموقع المختارة
   useEffect(() => {
     const savedLang = localStorage.getItem('site_lang') || 'en';
     setLang(savedLang);
 
     const updateMovieLanguage = async () => {
       if (!movieData) return;
-      
-      // حماية صارمة: إذا كان الفيلم عربي أصلاً، يظهر بالعربي دائماً بغض النظر عن لغة الموقع
       if (movieData.original_language === 'ar') {
-        const arRes = await fetch(`${BASE_URL}/movie/${id || movieData.id}?api_key=${API_KEY}&language=ar-SA`);
+        const arRes = await fetch(`${BASE_URL}/movie/${movieData.id}?api_key=${API_KEY}&language=ar-SA`);
         const arData = await arRes.json();
         setMovie(arData);
       } else if (savedLang === 'ar') {
-        // إذا كان أجنبي والموقع عربي، نجلب الاسم المترجم
         const arRes = await fetch(`${BASE_URL}/movie/${movieData.id}?api_key=${API_KEY}&language=ar-SA`);
         const arData = await arRes.json();
         setMovie(arData);
@@ -136,8 +131,14 @@ export default function MovieDetail({ movieData }) {
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       
+      {/* 🚨 حل مشكلة الحواف البيضاء جذرياً في صفحة التفاصيل */}
       <style jsx global>{`
-        html, body { margin: 0 !important; padding: 0 !important; background-color: #050505 !important; }
+        html, body, #__next {
+          margin: 0 !important;
+          padding: 0 !important;
+          background-color: #050505 !important;
+          background: #050505 !important;
+        }
       `}</style>
 
       <button 
@@ -156,7 +157,15 @@ export default function MovieDetail({ movieData }) {
         <div style={{ flex: 1, minWidth: '300px' }}>
           <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{movie.title}</h1>
           <p style={{ color: '#aaa', fontSize: '14px' }}>{lang === 'ar' ? 'تاريخ الإصدار:' : 'Release Date:'} {movie.release_date} | ⭐ {movie.vote_average?.toFixed(1)}</p>
-          <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '15px', color: '#ddd' }}>{movie.overview || "لا يوجد وصف متوفر للفيلم."}</p>
+          
+          {/* 👑 إضافة مربع الحقوق الحصري والمميز داخل خانة الوصف */}
+          <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderLeft: '4px solid #e50914', borderRight: lang === 'ar' ? '4px solid #e50914' : 'none', fontSize: '13px', color: '#e50914', fontWeight: 'bold', letterSpacing: '1px' }}>
+            {lang === 'ar' ? 'حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي' : 'Streaming Rights Reserved to: Nawaf Al-Nazawi'}
+          </div>
+
+          <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>
+            {movie.overview || (lang === 'ar' ? "لا يوجد وصف متوفر للفيلم." : "No overview available.")}
+          </p>
         </div>
       </div>
 
