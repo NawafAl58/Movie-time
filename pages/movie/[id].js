@@ -11,7 +11,7 @@ export async function getServerSideProps(context) {
   try {
     const res = await fetch(`${BASE_URL}/${mediaType}/${id}?api_key=${API_KEY}&language=en-US`);
     const movieData = await res.json();
-    movieData.media_type_fixed = mediaType; // تثبيت النوع
+    movieData.media_type_fixed = mediaType;
     return { props: { movieData } };
   } catch (error) {
     return { props: { movieData: null } };
@@ -26,7 +26,7 @@ export default function MovieDetail({ movieData }) {
   const [streamUrl, setStreamUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [useFallback, setUseFallback] = useState(false);
-  const [arabicServerIndex, setArabicServerIndex] = useState(0); // مؤشر التنقل بين السيرفرات العربية
+  const [arabicServerIndex, setArabicServerIndex] = useState(0);
 
   const mediaType = movieData?.media_type_fixed || type || 'movie';
 
@@ -60,21 +60,18 @@ export default function MovieDetail({ movieData }) {
       setIsLoading(true);
       setUseFallback(false);
       
-      // 🚨 نظام السيرفرات الهجين الثلاثي المخصص لتشغيل المسلسلات والأفلام العربية 100% بدون تقطيع:
       if (movie.original_language === 'ar') {
         const arabicServers = [
-          `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`,
           `https://autoembed.to/${mediaType}/tmdb/${movie.id}`,
-          `https://embed.su/embed/${mediaType}/${movie.id}`
+          `https://embed.su/embed/${mediaType}/${movie.id}`,
+          `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`
         ];
-        // اختيار السيرفر حسب المؤشر الحالي
         setStreamUrl(arabicServers[arabicServerIndex]);
         setUseFallback(true);
         setIsLoading(false);
         return;
       }
 
-      // للأفلام الأجنبية: البحث في التورنت كالعادة
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
       const fallbackUrl = `https://vidsrc.to/embed/${mediaType}/${movie.id}`;
@@ -182,12 +179,11 @@ export default function MovieDetail({ movieData }) {
       </div>
 
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
           <h3 style={{ fontSize: '18px', margin: 0 }}>
-            {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? `📺 يتم التشغيل عبر سيرفر عربي احتياطي #${arabicServerIndex + 1}` : `📺 Playing via Backup Arabic Server #${arabicServerIndex + 1}`) : '💎 Now Playing Premium 4K (Debrid)'}
+            {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? `📺 يتم التشغيل عبر سيرفر احتياطي معزول وآمن` : `📺 Playing via Secured Standby Server`) : '💎 Now Playing Premium 4K (Debrid)'}
           </h3>
           
-          {/* 🔄 زر التبديل بين السيرفرات العربية المخصصة يدوياً وتلقائياً إذا تعطل واحد */}
           {movie.original_language === 'ar' && !isLoading && (
             <button 
               onClick={() => setArabicServerIndex((prev) => (prev + 1) % 3)}
@@ -202,7 +198,13 @@ export default function MovieDetail({ movieData }) {
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
           ) : useFallback ? (
-            <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen></iframe>
+            /* 🛡️ تم حقن جدار الحماية sandbox هنا لمنع النوافذ الخبيثة تماماً */
+            <iframe 
+              src={streamUrl} 
+              style={{ width: '100%', height: '100%', border: 'none' }} 
+              allowFullScreen
+              sandbox="allow-scripts allow-same-origin allow-forms"
+            ></iframe>
           ) : (
             <video src={streamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           )}
