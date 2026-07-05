@@ -1,12 +1,9 @@
-import Link from 'next/link';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link'; // ◀ الخطوة 3: استيراد أداة الملاحة بين الصفحات
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
-
-// 🔑 توكن حسابك الصحيح والفعال من Real-Debrid
-const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 const GENRES = [
   { id: 'all', name: 'Trending 🔥' },
@@ -46,16 +43,10 @@ export async function getServerSideProps() {
 
 export default function Home({ trendingMovies, trendingShows }) {
   const [activeTab, setActiveTab] = useState('movies'); 
-  const [selectedMedia, setSelectedMedia] = useState(null);
-  const [streamUrl, setStreamUrl] = useState(''); 
-  const [useFallbackServer, setUseFallbackServer] = useState(false); 
-  const [isLoadingLink, setIsLoadingLink] = useState(false); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedGenre, setSelectedGenre] = useState('all');
   const [genreItems, setGenreItems] = useState([]);
-  
-  const playerRef = useRef(null);
 
   // 🔍 البحث التلقائي الفوري للافلام والمسلسلات
   useEffect(() => {
@@ -108,124 +99,6 @@ export default function Home({ trendingMovies, trendingShows }) {
   useEffect(() => {
     setSelectedGenre('all');
   }, [activeTab, searchQuery]);
-
-  // 📡 دالة البحث المتقدمة متعددة المصادر لجلب التورنت
-  const fetchTorrentHash = async (queryName, year) => {
-    const searchQueries = [
-      `${queryName} ${year} 4K`,
-      `${queryName} ${year} 1080p`
-    ];
-
-    for (let q of searchQueries) {
-      try {
-        const res = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(q)}`);
-        const torrents = await res.json();
-        if (torrents && torrents.length > 0 && torrents[0].info_hash !== "0000000000000000000000000000000000000000") {
-          return { hash: torrents[0].info_hash, name: torrents[0].name };
-        }
-      } catch (e) { console.log("Source 1 failed..."); }
-    }
-
-    try {
-      const res = await fetch(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(queryName)}`);
-      const data = await res.json();
-      if (data && data.data && data.data.movies && data.data.movies.length > 0) {
-        const movie = data.data.movies[0];
-        const torrent = movie.torrents.find(t => t.quality === '2160p') || movie.torrents[0];
-        if (torrent && torrent.hash) {
-          return { hash: torrent.hash, name: movie.title };
-        }
-      }
-    } catch (e) { console.log("Source 2 failed."); }
-
-    return null;
-  };
-
-  // نظام فحص وجلب الروابط الهجين مع توجيه المحتوى العربي لسيرفرات مخصصة لشغله
-  useEffect(() => {
-    if (!selectedMedia) {
-      setStreamUrl('');
-      setUseFallbackServer(false);
-      return;
-    }
-
-    const fetchPremiumLink = async () => {
-      setIsLoadingLink(true);
-      setUseFallbackServer(false);
-      
-      const queryName = selectedMedia.original_title || selectedMedia.original_name || selectedMedia.title || selectedMedia.name;
-      const year = selectedMedia.release_date?.split('-')[0] || selectedMedia.first_air_date?.split('-')[0] || '';
-      const currentType = selectedMedia.first_air_date ? 'tv' : 'movie';
-
-      // 🚨 الحل السحري للمحتوى العربي:
-      // إذا كان الفيلم/المسلسل عربي، نوجهه تلقائياً لسيرفر vidsrc.cc أو embed.su لأنهم يملكون ملفات وسيرفرات خاصة للمحتوى العربي
-      if (selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows' || selectedMedia.original_language === 'ar') {
-        // نستخدم سيرفر vidsrc.cc الاحترافي للمحتوى العربي بدلاً من السيرفر القديم
-        const arabicFallbackUrl = `https://vidsrc.cc/v2/embed/${currentType}/${selectedMedia.id}?autoPlay=true`;
-        setStreamUrl(arabicFallbackUrl);
-        setUseFallbackServer(true);
-        setIsLoadingLink(false);
-        return;
-      }
-      
-      // للأفلام الأجنبية: يكمل فحص التورنت و Real-Debrid كالعادة
-      try {
-        const torrentData = await fetchTorrentHash(queryName, year);
-
-        if (!torrentData) {
-          setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
-          setUseFallbackServer(true);
-          setIsLoadingLink(false);
-          return;
-        }
-
-        const magnetLink = `magnet:?xt=urn:btih:${torrentData.hash}&dn=${encodeURIComponent(torrentData.name)}`;
-
-        const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-          body: new URLSearchParams({ magnet: magnetLink })
-        });
-        const torrentInfo = await addTorrentRes.json();
-
-        await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentInfo.id}`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-          body: new URLSearchParams({ files: 'all' })
-        });
-
-        const getFilesRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentInfo.id}`, {
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-        });
-        const finalInfo = await getFilesRes.json();
-        
-        if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
-          const debridLink = finalInfo.links[0];
-          const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-            body: new URLSearchParams({ link: debridLink })
-          });
-          const finalPremiumData = await unrestrictRes.json();
-          setStreamUrl(finalPremiumData.download);
-        } else {
-          setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
-          setUseFallbackServer(true);
-        }
-      } catch (err) {
-        console.error("Real-Debrid error, falling back:", err);
-        setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
-        setUseFallbackServer(true);
-      }
-      setIsLoadingLink(false);
-    };
-
-    fetchPremiumLink();
-
-    if (playerRef.current) {
-      playerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [selectedMedia]);
 
   let currentItems = [];
   let sectionTitle = `Trending ${activeTab === 'movies' ? 'Movies' : 'TV Shows'}`;
@@ -289,7 +162,7 @@ export default function Home({ trendingMovies, trendingShows }) {
             <button 
               tabIndex="0"
               className="btn-tv-focusable"
-              onClick={() => { setActiveTab('movies'); setSelectedMedia(null); setSearchQuery(''); }}
+              onClick={() => { setActiveTab('movies'); setSearchQuery(''); }}
               style={{ backgroundColor: activeTab === 'movies' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.1s' }}
             >
               Movies
@@ -297,7 +170,7 @@ export default function Home({ trendingMovies, trendingShows }) {
             <button 
               tabIndex="0"
               className="btn-tv-focusable"
-              onClick={() => { setActiveTab('shows'); setSelectedMedia(null); setSearchQuery(''); }}
+              onClick={() => { setActiveTab('shows'); setSearchQuery(''); }}
               style={{ backgroundColor: activeTab === 'shows' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.1s' }}
             >
               TV Shows
@@ -311,7 +184,7 @@ export default function Home({ trendingMovies, trendingShows }) {
               key={genre.id}
               tabIndex="0"
               className="btn-tv-focusable"
-              onClick={() => { setSelectedGenre(genre.id); setSelectedMedia(null); }}
+              onClick={() => { setSelectedGenre(genre.id); }}
               style={{
                 backgroundColor: selectedGenre === genre.id ? '#fff' : '#111',
                 color: selectedGenre === genre.id ? '#000' : '#fff',
@@ -330,67 +203,6 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* 📺 مشغل الفيديو الهجين الذكي المصلح */}
-        {selectedMedia && (
-          <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
-              <h3 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#fff' }}>
-                {isLoadingLink ? '🔍 Directing to the correct server path...' : useFallbackServer ? `📺 Playing via Standby Server: ${selectedMedia.title || selectedMedia.name}` : `💎 Now Playing Premium 4K: ${selectedMedia.title || selectedMedia.name}`}
-              </h3>
-              
-              <div style={{ display: 'flex', gap: '10px' }}>
-                {!isLoadingLink && !selectedGenre.startsWith('arabic') && selectedMedia.original_language !== 'ar' && (
-                  <button
-                    tabIndex="0"
-                    className="btn-tv-focusable"
-                    onClick={() => {
-                      const currentType = selectedMedia.first_air_date ? 'tv' : 'movie';
-                      if (!useFallbackServer) {
-                        setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
-                        setUseFallbackServer(true);
-                      } else {
-                        setSelectedMedia({...selectedMedia});
-                      }
-                    }}
-                    style={{ backgroundColor: '#111', color: '#aaa', border: '1px solid #333', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
-                  >
-                    {useFallbackServer ? "🔄 Force 4K Debrid" : "🔄 Switch to Backup"}
-                  </button>
-                )}
-                <button 
-                  tabIndex="0"
-                  className="btn-tv-focusable"
-                  onClick={() => { setSelectedMedia(null); setStreamUrl(''); }} 
-                  style={{ backgroundColor: '#333', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  Close Player ✕
-                </button>
-              </div>
-            </div>
-
-            <div style={{ width: '100%', height: '55vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
-              {isLoadingLink ? (
-                <div style={{ textAlign: 'center', color: '#e50914' }}>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Loading Stream Engine...</div>
-                  <div style={{ fontSize: '14px', color: '#999' }}>Securing the absolute direct link by ID mapping</div>
-                </div>
-              ) : useFallbackServer ? (
-                <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen></iframe>
-              ) : (
-                <video 
-                  id="main-tv-player"
-                  src={streamUrl} 
-                  controls
-                  autoPlay
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  className="tv-focusable"
-                  tabIndex="0"
-                />
-              )}
-            </div>
-          </div>
-        )}
-
         <main>
           <h2 style={{ fontSize: '22px', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px' }}>{sectionTitle}</h2>
           
@@ -399,28 +211,23 @@ export default function Home({ trendingMovies, trendingShows }) {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
               {currentItems.map((item) => (
-                <div 
-                  key={item.id} 
-                  tabIndex="0" 
-                  className="tv-focusable" 
-                  onClick={() => setSelectedMedia(item)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.keyCode === 13) {
-                      e.preventDefault();
-                      setSelectedMedia(item);
-                    }
-                  }} 
-                  style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: selectedMedia?.id === item.id ? '2px solid #e50914' : '1px solid #222', cursor: 'pointer', transition: 'transform 0.1s' }}
-                >
-                  <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Poster'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
-                  <div style={{ padding: '10px' }}>
-                    <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 6px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title || item.name}</h4>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#999' }}>
-                      <span>{item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0] || 'N/A'}</span>
-                      <span style={{ color: '#ffb703', fontWeight: 'bold' }}>⭐ {item.vote_average?.toFixed(1) || '0.0'}</span>
+                /* 🔗 هنا تم ربط الكارت بالـ Link لينقله تلقائياً لصفحة الفيلم */
+                <Link href={`/movie/${item.id}`} key={item.id} legacyBehavior>
+                  <div 
+                    tabIndex="0" 
+                    className="tv-focusable" 
+                    style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', transition: 'transform 0.1s' }}
+                  >
+                    <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Poster'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
+                    <div style={{ padding: '10px' }}>
+                      <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 6px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title || item.name}</h4>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#999' }}>
+                        <span>{item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0] || 'N/A'}</span>
+                        <span style={{ color: '#ffb703', fontWeight: 'bold' }}>⭐ {item.vote_average?.toFixed(1) || '0.0'}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
