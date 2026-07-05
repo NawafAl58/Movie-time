@@ -112,12 +112,9 @@ export default function Home({ trendingMovies, trendingShows }) {
   const fetchTorrentHash = async (queryName, year) => {
     const searchQueries = [
       `${queryName} ${year} 4K`,
-      `${queryName} ${year} 1080p`,
-      `${queryName} 4K`,
-      `${queryName} 1080p`
+      `${queryName} ${year} 1080p`
     ];
 
-    // جرب البحث في المصدر الأول (Apibay)
     for (let q of searchQueries) {
       try {
         const res = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(q)}`);
@@ -125,16 +122,14 @@ export default function Home({ trendingMovies, trendingShows }) {
         if (torrents && torrents.length > 0 && torrents[0].info_hash !== "0000000000000000000000000000000000000000") {
           return { hash: torrents[0].info_hash, name: torrents[0].name };
         }
-      } catch (e) { console.log("Source 1 failed, trying next..."); }
+      } catch (e) { console.log("Source 1 failed..."); }
     }
 
-    // مصدر احتياطي سريع وثاني (YTS API للأفلام المتاحة)
     try {
       const res = await fetch(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(queryName)}`);
       const data = await res.json();
       if (data && data.data && data.data.movies && data.data.movies.length > 0) {
         const movie = data.data.movies[0];
-        // يفضل جودة 1080p أو 2160p المتوفرة
         const torrent = movie.torrents.find(t => t.quality === '2160p') || movie.torrents[0];
         if (torrent && torrent.hash) {
           return { hash: torrent.hash, name: movie.title };
@@ -145,7 +140,7 @@ export default function Home({ trendingMovies, trendingShows }) {
     return null;
   };
 
-  // نظام فحص وجلب الروابط الهجين
+  // نظام فحص وجلب الروابط الهجين مع توجيه المحتوى العربي لسيرفرات مخصصة لشغله
   useEffect(() => {
     if (!selectedMedia) {
       setStreamUrl('');
@@ -157,24 +152,27 @@ export default function Home({ trendingMovies, trendingShows }) {
       setIsLoadingLink(true);
       setUseFallbackServer(false);
       
-      const queryName = selectedMedia.title || selectedMedia.name;
+      const queryName = selectedMedia.original_title || selectedMedia.original_name || selectedMedia.title || selectedMedia.name;
       const year = selectedMedia.release_date?.split('-')[0] || selectedMedia.first_air_date?.split('-')[0] || '';
-      const type = activeTab === 'movies' ? 'movie' : 'tv';
-      const fallbackUrl = `https://vidsrc.to/embed/${type}/${selectedMedia.id}`;
+      const currentType = selectedMedia.first_air_date ? 'tv' : 'movie';
 
-      if (selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows') {
-        setStreamUrl(fallbackUrl);
+      // 🚨 الحل السحري للمحتوى العربي:
+      // إذا كان الفيلم/المسلسل عربي، نوجهه تلقائياً لسيرفر vidsrc.cc أو embed.su لأنهم يملكون ملفات وسيرفرات خاصة للمحتوى العربي
+      if (selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows' || selectedMedia.original_language === 'ar') {
+        // نستخدم سيرفر vidsrc.cc الاحترافي للمحتوى العربي بدلاً من السيرفر القديم
+        const arabicFallbackUrl = `https://vidsrc.cc/v2/embed/${currentType}/${selectedMedia.id}?autoPlay=true`;
+        setStreamUrl(arabicFallbackUrl);
         setUseFallbackServer(true);
         setIsLoadingLink(false);
         return;
       }
       
+      // للأفلام الأجنبية: يكمل فحص التورنت و Real-Debrid كالعادة
       try {
-        // البحث عن التورنت باستخدام النظام المتعدد الجديد
         const torrentData = await fetchTorrentHash(queryName, year);
 
         if (!torrentData) {
-          setStreamUrl(fallbackUrl);
+          setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
           setUseFallbackServer(true);
           setIsLoadingLink(false);
           return;
@@ -182,7 +180,6 @@ export default function Home({ trendingMovies, trendingShows }) {
 
         const magnetLink = `magnet:?xt=urn:btih:${torrentData.hash}&dn=${encodeURIComponent(torrentData.name)}`;
 
-        // إرسال للـ Real-Debrid
         const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
@@ -211,12 +208,12 @@ export default function Home({ trendingMovies, trendingShows }) {
           const finalPremiumData = await unrestrictRes.json();
           setStreamUrl(finalPremiumData.download);
         } else {
-          setStreamUrl(fallbackUrl);
+          setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
           setUseFallbackServer(true);
         }
       } catch (err) {
         console.error("Real-Debrid error, falling back:", err);
-        setStreamUrl(fallbackUrl);
+        setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
         setUseFallbackServer(true);
       }
       setIsLoadingLink(false);
@@ -332,26 +329,25 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* 📺 مشغل الفيديو الهجين الذكي المحدث */}
+        {/* 📺 مشغل الفيديو الهجين الذكي المصلح */}
         {selectedMedia && (
           <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
               <h3 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#fff' }}>
-                {isLoadingLink ? '🔍 Searching Multiple 4K Torrent Streams...' : useFallbackServer ? `📺 Playing via Backup Server: ${selectedMedia.title || selectedMedia.name}` : `💎 Now Playing Premium 4K: ${selectedMedia.title || selectedMedia.name}`}
+                {isLoadingLink ? '🔍 Directing to the correct server path...' : useFallbackServer ? `📺 Playing via Standby Server: ${selectedMedia.title || selectedMedia.name}` : `💎 Now Playing Premium 4K: ${selectedMedia.title || selectedMedia.name}`}
               </h3>
               
               <div style={{ display: 'flex', gap: '10px' }}>
-                {!isLoadingLink && (
+                {!isLoadingLink && !selectedGenre.startsWith('arabic') && selectedMedia.original_language !== 'ar' && (
                   <button
                     tabIndex="0"
                     className="btn-tv-focusable"
                     onClick={() => {
-                      const type = activeTab === 'movies' ? 'movie' : 'tv';
+                      const currentType = selectedMedia.first_air_date ? 'tv' : 'movie';
                       if (!useFallbackServer) {
-                        setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+                        setStreamUrl(`https://vidsrc.to/embed/${currentType}/${selectedMedia.id}`);
                         setUseFallbackServer(true);
                       } else {
-                        // عند الضغط الإجباري، يعيد فحص التورنت من جديد بقوة
                         setSelectedMedia({...selectedMedia});
                       }
                     }}
@@ -374,8 +370,8 @@ export default function Home({ trendingMovies, trendingShows }) {
             <div style={{ width: '100%', height: '55vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
               {isLoadingLink ? (
                 <div style={{ textAlign: 'center', color: '#e50914' }}>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Scraping High-Speed Links...</div>
-                  <div style={{ fontSize: '14px', color: '#999' }}>Checking TorrentProject, YTS & Apibay for the ultimate 4K file</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Loading Stream Engine...</div>
+                  <div style={{ fontSize: '14px', color: '#999' }}>Securing the absolute direct link by ID mapping</div>
                 </div>
               ) : useFallbackServer ? (
                 <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen></iframe>
