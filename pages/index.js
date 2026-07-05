@@ -5,10 +5,10 @@ const API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
 
+// 📋 تصنيفات واجهة اللغة الإنجليزية
 const GENRES_EN = [
   { id: 'all', name: 'Trending 🔥' },
-  { id: 'arabic_movies', name: 'Arabic Movies 🎬' }, 
-  { id: 'arabic_shows', name: 'Arabic Series 📺' }, 
+  { id: 'arabic', name: 'Arabic 🇸🇦' }, // تصنيف عربي ديناميكي يتغير حسب القسم المختار
   { id: '28', name: 'Action 💥' },
   { id: '27', name: 'Horror 👻' },
   { id: '35', name: 'Comedy 😂' },
@@ -17,10 +17,10 @@ const GENRES_EN = [
   { id: '18', name: 'Drama 🎭' }
 ];
 
+// 📋 تصنيفات واجهة اللغة العربية
 const GENRES_AR = [
   { id: 'all', name: 'المحتوى الشائع 🔥' },
-  { id: 'arabic_movies', name: 'أفلام عربية 🎬' }, 
-  { id: 'arabic_shows', name: 'مسلسلات عربية 📺' }, 
+  { id: 'arabic', name: 'عربي 🇸🇦' }, // تصنيف عربي ديناميكي يتغير حسب القسم المختار
   { id: '28', name: 'أكشن 💥' },
   { id: '27', name: 'رعب 👻' },
   { id: '35', name: 'كوميدي 😂' },
@@ -72,6 +72,7 @@ export default function Home({ initialMovies, initialShows }) {
     setLang(newLang);
     localStorage.setItem('site_lang', newLang);
     setSearchQuery('');
+    setSelectedGenre('all');
   };
 
   useEffect(() => {
@@ -85,6 +86,7 @@ export default function Home({ initialMovies, initialShows }) {
     refreshTrending();
   }, [lang]);
 
+  // 🔍 البحث التلقائي المعزول حسب التبويب المختار لمنع التداخل
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setSearchResults([]);
@@ -105,6 +107,7 @@ export default function Home({ initialMovies, initialShows }) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, activeTab, lang]);
 
+  // 📡 جلب البيانات المفلترة ذكياً بدون تداخل عربي/أجنبي أو أفلام/مسلسلات
   useEffect(() => {
     if (selectedGenre === 'all') {
       setGenreItems([]);
@@ -112,17 +115,15 @@ export default function Home({ initialMovies, initialShows }) {
     }
     
     const fetchGenreData = async () => {
-      let type = activeTab === 'movies' ? 'movie' : 'tv';
-      if (selectedGenre === 'arabic_movies') type = 'movie';
-      if (selectedGenre === 'arabic_shows') type = 'tv';
-
-      const isArabicGenre = selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows';
+      const type = activeTab === 'movies' ? 'movie' : 'tv';
+      const isArabicGenre = selectedGenre === 'arabic';
+      
+      // المحتوى العربي يُجلب دائماً بـ ar-SA للحفاظ على البوسترات والأسماء العربية
       const currentLang = isArabicGenre ? 'ar-SA' : (lang === 'ar' ? 'ar-SA' : 'en-US');
-
       let url = `${BASE_URL}/discover/${type}?api_key=${API_KEY}&sort_by=popularity.desc&language=${currentLang}`;
       
       if (isArabicGenre) {
-        url += `&with_original_language=ar`; 
+        url += `&with_original_language=ar`; // فلتر اللغة العربية الصافي
       } else {
         url += `&with_genres=${selectedGenre}`; 
       }
@@ -136,11 +137,11 @@ export default function Home({ initialMovies, initialShows }) {
 
   useEffect(() => {
     setSelectedGenre('all');
-  }, [activeTab, searchQuery]);
+  }, [activeTab]);
 
   let currentItems = [];
   const genresList = lang === 'ar' ? GENRES_AR : GENRES_EN;
-  let sectionTitle = lang === 'ar' ? `الشائع حالياً` : `Trending Content`;
+  let sectionTitle = lang === 'ar' ? (activeTab === 'movies' ? 'أحدث الأفلام الشائعة' : 'أحدث المسلسلات الشائعة') : (activeTab === 'movies' ? 'Trending Movies' : 'Trending TV Shows');
 
   if (searchQuery.trim() !== '') {
     currentItems = searchResults;
@@ -148,7 +149,11 @@ export default function Home({ initialMovies, initialShows }) {
   } else if (selectedGenre !== 'all') {
     currentItems = genreItems;
     const genreObj = genresList.find(g => g.id === selectedGenre);
-    sectionTitle = genreObj ? genreObj.name : '';
+    if (selectedGenre === 'arabic') {
+      sectionTitle = lang === 'ar' ? (activeTab === 'movies' ? 'الأفلام العربية 🎬' : 'المسلسلات العربية 📺') : (activeTab === 'movies' ? 'Arabic Movies 🎬' : 'Arabic Series 📺');
+    } else {
+      sectionTitle = genreObj ? genreObj.name : '';
+    }
   } else {
     currentItems = activeTab === 'movies' ? trendingMovies : trendingShows;
   }
@@ -156,14 +161,8 @@ export default function Home({ initialMovies, initialShows }) {
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px', direction: lang === 'ar' ? 'rtl' : 'ltr', display: 'flex', flexDirection: 'column' }}>
       
-      {/* 🚨 حل مشكلة الحواف البيضاء جذرياً */}
       <style jsx global>{`
-        html, body, #__next {
-          margin: 0 !important;
-          padding: 0 !important;
-          background-color: #050505 !important;
-          background: #050505 !important;
-        }
+        html, body, #__next { margin: 0 !important; padding: 0 !important; background-color: #050505 !important; background: #050505 !important; }
         .tv-focusable:focus { outline: none !important; border: 3px solid #e50914 !important; transform: scale(1.04) !important; background-color: #1c1c1c !important; box-shadow: 0 0 15px #e50914; }
         .btn-tv-focusable:focus { outline: none !important; background-color: #e50914 !important; color: white !important; transform: scale(1.1) !important; box-shadow: 0 0 10px #e50914; }
       `}</style>
@@ -172,9 +171,8 @@ export default function Home({ initialMovies, initialShows }) {
         <header style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '15px', borderBottom: '2px solid #111', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <div>
             <h1 style={{ color: '#e50914', fontSize: '30px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
-            {/* 👑 الحقوق فوق تحت العنوان مباشرة */}
             <div style={{ fontSize: '12px', color: '#666', marginTop: '2px', fontWeight: 'bold', letterSpacing: '1px' }}>
-              BY: NAWAF ALNAZAWI
+              BY: NAWAF AL-NAZAWI
             </div>
           </div>
           
@@ -196,10 +194,10 @@ export default function Home({ initialMovies, initialShows }) {
           </div>
 
           <div style={{ display: 'flex', gap: '15px' }}>
-            <button tabIndex="0" className="btn-tv-focusable" onClick={() => { setActiveTab('movies'); }} style={{ backgroundColor: activeTab === 'movies' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}>
+            <button tabIndex="0" className="btn-tv-focusable" onClick={() => { setActiveTab('movies'); setSearchQuery(''); }} style={{ backgroundColor: activeTab === 'movies' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}>
               {lang === 'ar' ? 'الأفلام' : 'Movies'}
             </button>
-            <button tabIndex="0" className="btn-tv-focusable" onClick={() => { setActiveTab('shows'); }} style={{ backgroundColor: activeTab === 'shows' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}>
+            <button tabIndex="0" className="btn-tv-focusable" onClick={() => { setActiveTab('shows'); setSearchQuery(''); }} style={{ backgroundColor: activeTab === 'shows' ? '#e50914' : '#141414', color: 'white', border: 'none', padding: '10px 25px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}>
               {lang === 'ar' ? 'المسلسلات' : 'TV Shows'}
             </button>
           </div>
@@ -218,7 +216,8 @@ export default function Home({ initialMovies, initialShows }) {
                 border: '1px solid #222', padding: '8px 18px', fontSize: '14px', fontWeight: 'bold', borderRadius: '20px', cursor: 'pointer', whiteSpace: 'nowrap'
               }}
             >
-              {genre.name}
+              {/* تبديل أيقونة العربي ذكياً بناء على القسم المختار */}
+              {genre.id === 'arabic' ? (activeTab === 'movies' ? (lang === 'ar' ? 'عربي 🎬' : 'Arabic 🎬') : (lang === 'ar' ? 'عربي 📺' : 'Arabic 📺')) : genre.name}
             </button>
           ))}
         </div>
@@ -232,8 +231,11 @@ export default function Home({ initialMovies, initialShows }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
               {currentItems.map((item) => {
                 const displayName = item.title || item.name;
+                // إرسال نوع المحتوى الصافي (movie أو tv) للرابط لمنع اللبس بصفحة العرض
+                const itemType = item.first_air_date || activeTab === 'shows' ? 'tv' : 'movie';
+                
                 return (
-                  <Link href={`/movie/${item.id}`} key={item.id} legacyBehavior>
+                  <Link href={`/movie/${item.id}?type=${itemType}`} key={item.id} legacyBehavior>
                     <div tabIndex="0" className="tv-focusable" style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', transition: 'transform 0.1s' }}>
                       <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Poster'} alt={displayName} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
                       <div style={{ padding: '10px' }}>
@@ -252,9 +254,8 @@ export default function Home({ initialMovies, initialShows }) {
         </main>
       </div>
 
-      {/* 👑 الحقوق تحت في الفوتر باسمك الكامل */}
       <footer style={{ width: '100%', textAlign: 'center', padding: '15px 0', borderTop: '1px solid #111', marginTop: '40px', fontSize: '12px', color: '#666', letterSpacing: '1px', fontWeight: 'bold' }}>
-        Developed & Powered by <span style={{ color: '#e50914' }}>NAWAF ALNAZAWI</span> &copy; {new Date().getFullYear()}
+        Developed & Powered by <span style={{ color: '#e50914' }}>NAWAF AL-NAZAWI</span> &copy; {new Date().getFullYear()}
       </footer>
     </div>
   );
