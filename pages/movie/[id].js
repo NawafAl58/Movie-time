@@ -25,8 +25,10 @@ export default function MovieDetail({ movieData }) {
   const [lang, setLang] = useState('en');
   const [streamUrl, setStreamUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [useFallback, setUseFallback] = useState(false);
-  const [isNativePlayer, setIsNativePlayer] = useState(false); // نظام التشغيل الأصيل بدون iframe
+  
+  // نظام إدارة القوائم والسيرفرات المتاحة
+  const [servers, setServers] = useState([]);
+  const [activeServerId, setActiveServerId] = useState('');
 
   const mediaType = movieData?.media_type_fixed || type || 'movie';
 
@@ -56,39 +58,42 @@ export default function MovieDetail({ movieData }) {
   useEffect(() => {
     if (!movie) return;
 
-    const getStream = async () => {
+    const buildServersList = async () => {
       setIsLoading(true);
-      setUseFallback(false);
-      setIsNativePlayer(false);
-      
-      // 🚨 سكريبت نظام جلب البث المباشر المصلح للمحتوى العربي والسعودي
+      const list = [];
+
+      // 🚨 1. إذا كان المحتوى عربي أو سعودي
       if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
+        // نحاول جلب الرابط المباشر الأصيل أولاً كخيار أول مفضل
         try {
-          // محرك فحص ذكي يجلب الرابط المباشر الصافي لملف الفيديو المترجم أو العربي
           const response = await fetch(`https://api.vidsrc.pm/v1/${mediaType}/${movie.id}`);
           const data = await response.json();
-          
           if (data && data.url) {
-            setStreamUrl(data.url);
-            setIsNativePlayer(true); // تشغيل المشغل الداخلي الآمن
-          } else {
-            // كخطة احتياطية مستقرة جداً لا تحجب فيرسيل
-            setStreamUrl(`https://vidsrc.in/embed/${mediaType}/${movie.id}`);
-            setUseFallback(true);
+            list.push({ id: 'native-ar', name: lang === 'ar' ? '🚀 سيرفر مباشر فائق السرعة' : '🚀 Direct Native Stream', url: data.url, type: 'video' });
           }
-        } catch (e) {
-          // سيرفر طوارئ مفتوح ومستقر
-          setStreamUrl(`https://vidsrc.in/embed/${mediaType}/${movie.id}`);
-          setUseFallback(true);
+        } catch (e) {}
+
+        // سيرفرات الـ Embed الاحتياطية المفتوحة للعربي
+        list.push({ id: 'su-ar', name: lang === 'ar' ? '📺 سيرفر خليجي مستقر (SU)' : '📺 Stable Khaleej Server (SU)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+        list.push({ id: 'me-ar', name: lang === 'ar' ? '🌐 سيرفر عربي بديل (ME)' : '🌐 Alternative Arab Server (ME)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
+        
+        setServers(list);
+        // اختيار أفضل سيرفر تلقائياً (الأول في القائمة)
+        if (list.length > 0) {
+          setActiveServerId(list[0].id);
+          setStreamUrl(list[0].url);
         }
         setIsLoading(false);
         return;
       }
 
-      // 🌐 مسار المحتوى الأجنبي الصافي (تورنت + ديبريد / سيرفر احتياطي)
+      // 🌐 2. إذا كان المحتوى أجنبي (نبحث عن التورنت Premium 4K أولاً)
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
-      const fallbackUrl = `https://vidsrc.to/embed/${mediaType}/${movie.id}`;
+
+      // إضافة السيرفرات الاحتياطية المفتوحة للأجنبي دائماً في القائمة
+      const fallbackSU = `https://vidsrc.su/embed/${mediaType}/${movie.id}`;
+      const fallbackME = `https://vidsrc.me/embed/${mediaType}/${movie.id}`;
 
       try {
         const searchQueries = [`${queryName} ${year} 4K`, `${queryName} ${year} 1080p`];
@@ -105,58 +110,67 @@ export default function MovieDetail({ movieData }) {
           }
         }
 
-        if (!hash) {
-          setStreamUrl(fallbackUrl);
-          setUseFallback(true);
-          setIsLoading(false);
-          return;
-        }
-
-        const magnetLink = `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(torrentName)}`;
-        const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-          body: new URLSearchParams({ magnet: magnetLink })
-        });
-        const torrentInfo = await addTorrentRes.json();
-
-        await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentInfo.id}`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-          body: new URLSearchParams({ files: 'all' })
-        });
-
-        const getFilesRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentInfo.id}`, {
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-        });
-        const finalInfo = await getFilesRes.json();
-        
-        if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
-          const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+        if (hash) {
+          const magnetLink = `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(torrentName)}`;
+          const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-            body: new URLSearchParams({ link: finalInfo.links[0] })
+            body: new URLSearchParams({ magnet: magnetLink })
           });
-          const finalPremiumData = await unrestrictRes.json();
-          setStreamUrl(finalPremiumData.download);
-        } else {
-          setStreamUrl(fallbackUrl);
-          setUseFallback(true);
+          const torrentInfo = await addTorrentRes.json();
+
+          await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentInfo.id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+            body: new URLSearchParams({ files: 'all' })
+          });
+
+          const getFilesRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentInfo.id}`, {
+            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
+          });
+          const finalInfo = await getFilesRes.json();
+          
+          if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
+            const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+              body: new URLSearchParams({ link: finalInfo.links[0] })
+            });
+            const finalPremiumData = await unrestrictRes.json();
+            
+            // إضافة سيرفر ديبريد كخيار أول مفضل 4K
+            list.push({ id: 'debrid-4k', name: lang === 'ar' ? '💎 سيرفر بريميوم صـافي 4K (Debrid)' : '💎 Premium 4K Stream (Debrid)', url: finalPremiumData.download, type: 'video' });
+          }
         }
-      } catch (err) {
-        setStreamUrl(fallbackUrl);
-        setUseFallback(true);
+      } catch (err) {}
+
+      // إضافة السيرفرات المفتوحة للقائمة
+      list.push({ id: 'vidsrc-su', name: lang === 'ar' ? '🎬 سيرفر رئيسي عالي الجودة (SU)' : '🎬 Main High Quality (SU)', url: fallbackSU, type: 'iframe' });
+      list.push({ id: 'vidsrc-me', name: lang === 'ar' ? '🍿 سيرفر احتياطي سريع (ME)' : '🍿 Fast Backup Stream (ME)', url: fallbackME, type: 'iframe' });
+
+      setServers(list);
+      // الاختيار التلقائي لأفضل سيرفر متاح
+      if (list.length > 0) {
+        setActiveServerId(list[0].id);
+        setStreamUrl(list[0].url);
       }
       setIsLoading(false);
     };
 
-    getStream();
+    buildServersList();
   }, [movie]);
+
+  // دالة التبديل اليدوي بين السيرفرات عند ضغط المستخدم
+  const handleServerChange = (serverId, serverUrl) => {
+    setActiveServerId(serverId);
+    setStreamUrl(serverUrl);
+  };
 
   if (!movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
 
   const displayTitle = movie.title || movie.name;
   const displayRelease = movie.release_date || movie.first_air_date;
+  const currentActiveServer = servers.find(s => s.id === activeServerId);
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
@@ -183,7 +197,7 @@ export default function MovieDetail({ movieData }) {
           <p style={{ color: '#aaa', fontSize: '14px' }}>{lang === 'ar' ? 'تاريخ الإصدار:' : 'Release Date:'} {displayRelease} | ⭐ {movie.vote_average?.toFixed(1)}</p>
           
           <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderLeft: '4px solid #e50914', borderRight: lang === 'ar' ? '4px solid #e50914' : 'none', fontSize: '13px', color: '#e50914', fontWeight: 'bold', letterSpacing: '1px' }}>
-            {lang === 'ar' ? 'حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي' : 'Streaming Rights Reserved to: Nawaf AlNazawi'}
+            {lang === 'ar' ? 'حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي' : 'Streaming Rights Reserved to: Nawaf Al-Nazawi'}
           </div>
 
           <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>
@@ -192,16 +206,17 @@ export default function MovieDetail({ movieData }) {
         </div>
       </div>
 
-      <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
-        <h3 style={{ marginBottom: '15px', fontSize: '18px' }}>
-          {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : isNativePlayer ? (lang === 'ar' ? '🍿 تشغيل البث المباشر المباشر والآمن 100%' : '🍿 Playing Safe Direct Native Stream') : (lang === 'ar' ? `📺 يتم التشغيل عبر سيرفر احتياطي مفتوح` : `📺 Playing via Standby Server`)}
+      {/* منطقة المشغل وقائمة السيرفرات */}
+      <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
+        <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
+          {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : `🍿 ${currentActiveServer?.name}`}
         </h3>
 
-        <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+        {/* 📺 مشغل الفيديو */}
+        <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
-          ) : isNativePlayer ? (
-            /* 🍿 المشغل الداخلي الأصيل - آمن 100% وبدون إعلانات أو شاشة سوداء */
+          ) : currentActiveServer?.type === 'video' ? (
             <video 
               src={streamUrl} 
               controls 
@@ -213,9 +228,42 @@ export default function MovieDetail({ movieData }) {
               src={streamUrl} 
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen
+              allow="autoplay; encrypted-media"
             ></iframe>
           )}
         </div>
+
+        {/* 🎛️ أزرار قوائم السيرفرات التفاعلية */}
+        {!isLoading && servers.length > 0 && (
+          <div>
+            <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px', fontWeight: 'bold' }}>
+              {lang === 'ar' ? 'اختر سيرفر يدوي إذا واجهت مشكلة:' : 'Select a server manually if you face issues:'}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {servers.map((srv) => (
+                <button
+                  key={srv.id}
+                  onClick={() => handleServerChange(srv.id, srv.url)}
+                  style={{
+                    backgroundColor: activeServerId === srv.id ? '#e50914' : '#111',
+                    color: '#fff',
+                    border: activeServerId === srv.id ? '1px solid #e50914' : '1px solid #333',
+                    padding: '10px 18px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseOver={(e) => { if(activeServerId !== srv.id) e.target.style.borderColor = '#e50914'; }}
+                  onMouseOut={(e) => { if(activeServerId !== srv.id) e.target.style.borderColor = '#333'; }}
+                >
+                  {srv.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
