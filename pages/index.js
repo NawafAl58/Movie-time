@@ -4,6 +4,9 @@ const API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
 
+// 🔑 توكن حسابك الصحيح والفعال من Real-Debrid
+const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
+
 const GENRES = [
   { id: 'all', name: 'Trending 🔥' },
   { id: 'arabic_movies', name: 'أفلام عربية 🎬' }, 
@@ -43,6 +46,8 @@ export async function getServerSideProps() {
 export default function Home({ trendingMovies, trendingShows }) {
   const [activeTab, setActiveTab] = useState('movies'); 
   const [selectedMedia, setSelectedMedia] = useState(null);
+  const [streamUrl, setStreamUrl] = useState(''); // ◀ تخزين رابط الـ 4K البريميوم المباشر
+  const [isLoadingLink, setIsLoadingLink] = useState(false); // ◀ حالة التحميل أثناء توليد الرابط
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedGenre, setSelectedGenre] = useState('all');
@@ -102,8 +107,89 @@ export default function Home({ trendingMovies, trendingShows }) {
     setSelectedGenre('all');
   }, [activeTab, searchQuery]);
 
+  // تأثير لجلب رابط الـ 4K البريميوم فور اختيار الفيلم أو المسلسل
   useEffect(() => {
-    if (selectedMedia && playerRef.current) {
+    if (!selectedMedia) {
+      setStreamUrl('');
+      return;
+    }
+
+    const fetchPremiumLink = async () => {
+      setIsLoadingLink(true);
+      const queryName = selectedMedia.title || selectedMedia.name;
+      const year = selectedMedia.release_date?.split('-')[0] || selectedMedia.first_air_date?.split('-')[0] || '';
+      
+      try {
+        // 1. البحث التلقائي عن جودة 4K في التورنتس العامة
+        const torrentSearchUrl = `https://api.apibay.org/q.php?q=${encodeURIComponent(queryName + ' ' + year + ' 4K')}`;
+        const torrentRes = await fetch(torrentSearchUrl);
+        const torrents = await torrentRes.json();
+        
+        let targetTorrent = torrents && torrents.length > 0 ? torrents[0] : null;
+
+        // خيار بديل إذا لم يجد نسخة 4K يبحث عن 1080p
+        if (!targetTorrent || targetTorrent.info_hash === "0000000000000000000000000000000000000000") {
+          const fallbackRes = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(queryName + ' ' + year + ' 1080p')}`);
+          const fallbackTorrents = await fallbackRes.json();
+          if (fallbackTorrents && fallbackTorrents.length > 0) {
+            targetTorrent = fallbackTorrents[0];
+          }
+        }
+
+        if (!targetTorrent || targetTorrent.info_hash === "0000000000000000000000000000000000000000") {
+          // إذا لم يجد روابط تورنت إطلاقاً، نرجع للسيرفر الإفتراضي كخيار احتياطي لضمان التشغيل دائماً
+          const type = activeTab === 'movies' ? 'movie' : 'tv';
+          setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+          setIsLoadingLink(false);
+          return;
+        }
+
+        const magnetLink = `magnet:?xt=urn:btih:${targetTorrent.info_hash}&dn=${encodeURIComponent(targetTorrent.name)}`;
+
+        // 2. إرسال للـ Real-Debrid لفك التشفير وتوليد الرابط المباشر العالي الجودة
+        const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+          body: new URLSearchParams({ magnet: magnetLink })
+        });
+        const torrentInfo = await addTorrentRes.json();
+
+        await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentInfo.id}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+          body: new URLSearchParams({ files: 'all' })
+        });
+
+        const getFilesRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentInfo.id}`, {
+          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
+        });
+        const finalInfo = await getFilesRes.json();
+        
+        if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
+          const debridLink = finalInfo.links[0];
+          const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+            body: new URLSearchParams({ link: debridLink })
+          });
+          const finalPremiumData = await unrestrictRes.json();
+          setStreamUrl(finalPremiumData.download);
+        } else {
+          // احتياطي
+          const type = activeTab === 'movies' ? 'movie' : 'tv';
+          setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+        }
+      } catch (err) {
+        console.error("Real-Debrid error, falling back:", err);
+        const type = activeTab === 'movies' ? 'movie' : 'tv';
+        setStreamUrl(`https://vidsrc.to/embed/${type}/${selectedMedia.id}`);
+      }
+      setIsLoadingLink(false);
+    };
+
+    fetchPremiumLink();
+
+    if (playerRef.current) {
       playerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [selectedMedia]);
@@ -126,11 +212,6 @@ export default function Home({ trendingMovies, trendingShows }) {
     currentItems = activeTab === 'movies' ? trendingMovies : trendingShows;
   }
 
-  const getStreamUrl = (item) => {
-    const type = activeTab === 'movies' ? 'movie' : 'tv';
-    return `https://vidsrc.to/embed/${type}/${item.id}`;
-  };
-
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px', direction: 'ltr', display: 'flex', flexDirection: 'column' }}>
       
@@ -138,7 +219,7 @@ export default function Home({ trendingMovies, trendingShows }) {
         .tv-focusable:focus {
           outline: none !important;
           border: 3px solid #e50914 !important;
-          transform: scale(1.08) !important;
+          transform: scale(1.04) !important;
           background-color: #1c1c1c !important;
           box-shadow: 0 0 15px #e50914;
         }
@@ -216,46 +297,44 @@ export default function Home({ trendingMovies, trendingShows }) {
           ))}
         </div>
 
-        {/* 📺 مشغل الفيديو المطور لاستقبال الفوكس من الريموت */}
+        {/* 📺 مشغل الفيديو المطور بدقة 4K وصوت كامل بدون قيود الـ iframe */}
         {selectedMedia && (
-          <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '10px', borderRadius: '12px', border: '2px solid #e50914' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
-              <h3 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>Now Playing: {selectedMedia.title || selectedMedia.name}</h3>
+          <div ref={playerRef} style={{ marginBottom: '30px', backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#fff' }}>
+                {isLoadingLink ? '🔍 Generating Premium Link...' : `💎 Now Playing (Premium): ${selectedMedia.title || selectedMedia.name}`}
+              </h3>
               <button 
                 tabIndex="0"
                 className="btn-tv-focusable"
-                onClick={(e) => { e.stopPropagation(); setSelectedMedia(null); }} 
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.stopPropagation(); setSelectedMedia(null); }
-                }}
-                style={{ backgroundColor: '#333', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                onClick={() => { setSelectedMedia(null); setStreamUrl(''); }} 
+                style={{ backgroundColor: '#333', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}
               >
                 Close Player ✕
               </button>
             </div>
 
-            <div 
-              tabIndex="0" 
-              className="tv-focusable" 
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.keyCode === 13) {
-                  e.preventDefault();
-                  const iframe = document.getElementById('tv-player');
-                  if (iframe) {
-                    iframe.focus();
-                    iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-                  }
-                }
-              }}
-              style={{ width: '100%', height: '55vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.1s' }}
-            >
-              <iframe 
-                id="tv-player"
-                src={getStreamUrl(selectedMedia)} 
-                style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'auto' }} 
-                allowFullScreen 
-                scrolling="no"
-              ></iframe>
+            <div style={{ width: '100%', height: '55vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+              {isLoadingLink ? (
+                <div style={{ textAlign: 'center', color: '#e50914' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>Bypassing & Fetching 4K BluRay Torrent...</div>
+                  <div style={{ fontSize: '14px', color: '#999' }}>Real-Debrid API is unrestricting your high-speed stream</div>
+                </div>
+              ) : streamUrl.includes('embed') ? (
+                /* في حال لم يجد تورنت يعود تلقائياً للـ iframe كخيار احتياطي */
+                <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen></iframe>
+              ) : (
+                /* مشغل الفيديو الأصلي الفاخر للأفلام المباشرة والـ 4K الصوت فيه 100% طاقة */
+                <video 
+                  id="main-tv-player"
+                  src={streamUrl} 
+                  controls
+                  autoPlay
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  className="tv-focusable"
+                  tabIndex="0"
+                />
+              )}
             </div>
           </div>
         )}
