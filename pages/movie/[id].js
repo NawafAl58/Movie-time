@@ -52,8 +52,9 @@ export default function MovieDetail({ movieData }) {
       setIsLoading(true);
       const currentType = 'movie';
       
+      // 🚨 التوجيه الاوتوماتيكي الجديد للمحتوى العربي عبر سيرفر البث autoembed المستقر والمدعوم عربياً
       if (movie.original_language === 'ar') {
-        setStreamUrl(`https://embed.su/embed/${currentType}/${movie.id}`);
+        setStreamUrl(`https://autoembed.to/movie/tmdb/${movie.id}`);
         setUseFallback(true);
         setIsLoading(false);
         return;
@@ -131,7 +132,6 @@ export default function MovieDetail({ movieData }) {
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       
-      {/* 🚨 حل مشكلة الحواف البيضاء جذرياً في صفحة التفاصيل */}
       <style jsx global>{`
         html, body, #__next {
           margin: 0 !important;
@@ -158,7 +158,6 @@ export default function MovieDetail({ movieData }) {
           <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{movie.title}</h1>
           <p style={{ color: '#aaa', fontSize: '14px' }}>{lang === 'ar' ? 'تاريخ الإصدار:' : 'Release Date:'} {movie.release_date} | ⭐ {movie.vote_average?.toFixed(1)}</p>
           
-          {/* 👑 إضافة مربع الحقوق الحصري والمميز داخل خانة الوصف */}
           <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderLeft: '4px solid #e50914', borderRight: lang === 'ar' ? '4px solid #e50914' : 'none', fontSize: '13px', color: '#e50914', fontWeight: 'bold', letterSpacing: '1px' }}>
             {lang === 'ar' ? 'حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي' : 'Streaming Rights Reserved to: Nawaf Al-Nazawi'}
           </div>
@@ -171,7 +170,7 @@ export default function MovieDetail({ movieData }) {
 
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px' }}>
-          {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? '📺 يتم التشغيل عبر سيرفر احتياطي' : '📺 Playing via Standby Server') : '💎 Now Playing Premium 4K (Debrid)'}
+          {isLoading ? (lang === 'ar' ? '🔍 جاري جلب السيرفر المباشر...' : '🔍 Loading Stream...') : useFallback ? (lang === 'ar' ? '📺 يتم التشغيل عبر سيرفر احتياطي مستقر' : '📺 Playing via Stable Standby Server') : '💎 Now Playing Premium 4K (Debrid)'}
         </h3>
         <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {isLoading ? (
