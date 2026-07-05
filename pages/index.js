@@ -6,6 +6,8 @@ const IMAGE_URL = 'https://image.tmdb.org/t/p/w300';
 
 const GENRES = [
   { id: 'all', name: 'Trending 🔥' },
+  { id: 'arabic_movies', name: 'أفلام عربية 🎬' }, 
+  { id: 'arabic_shows', name: 'مسلسلات عربية 📺' }, 
   { id: '28', name: 'Action 💥' },
   { id: '27', name: 'Horror 👻' },
   { id: '35', name: 'Comedy 😂' },
@@ -48,7 +50,7 @@ export default function Home({ trendingMovies, trendingShows }) {
   
   const playerRef = useRef(null);
 
-  // 🔍 تأثير البحث التلقائي الفوري للافلام والمسلسلات
+  // 🔍 البحث التلقائي الفوري للافلام والمسلسلات
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setSearchResults([]);
@@ -63,22 +65,36 @@ export default function Home({ trendingMovies, trendingShows }) {
       } catch (err) {
         console.error("Search error:", err);
       }
-    }, 400); // إرسال الطلب بعد 400 ملم من التوقف عن الكتابة لتخفيف الضغط
+    }, 400); 
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, activeTab]);
 
-  // جلب البيانات حسب التصنيف
+  // جلب البيانات حسب التصنيف ودعم المحتوى العربي
   useEffect(() => {
     if (selectedGenre === 'all') {
       setGenreItems([]);
       return;
     }
+    
     const fetchGenreData = async () => {
-      const type = activeTab === 'movies' ? 'movie' : 'tv';
-      const data = await fetchMultiplePages(`${BASE_URL}/discover/${type}?api_key=${API_KEY}&with_genres=${selectedGenre}&sort_by=popularity.desc&language=en-US`);
+      let type = activeTab === 'movies' ? 'movie' : 'tv';
+      
+      if (selectedGenre === 'arabic_movies') type = 'movie';
+      if (selectedGenre === 'arabic_shows') type = 'tv';
+
+      let url = `${BASE_URL}/discover/${type}?api_key=${API_KEY}&sort_by=popularity.desc&language=ar-SA`;
+      
+      if (selectedGenre === 'arabic_movies' || selectedGenre === 'arabic_shows') {
+        url += `&with_original_language=ar`; 
+      } else {
+        url += `&with_genres=${selectedGenre}`; 
+      }
+      
+      const data = await fetchMultiplePages(url);
       setGenreItems(data);
     };
+    
     fetchGenreData();
   }, [selectedGenre, activeTab]);
 
@@ -101,7 +117,11 @@ export default function Home({ trendingMovies, trendingShows }) {
   } else if (selectedGenre !== 'all') {
     currentItems = genreItems;
     const genreObj = GENRES.find(g => g.id === selectedGenre);
-    sectionTitle = `${genreObj ? genreObj.name : ''} - ${activeTab === 'movies' ? 'Movies' : 'TV Shows'}`;
+    if (selectedGenre.startsWith('arabic')) {
+      sectionTitle = genreObj ? genreObj.name : '';
+    } else {
+      sectionTitle = `${genreObj ? genreObj.name : ''} - ${activeTab === 'movies' ? 'Movies' : 'TV Shows'}`;
+    }
   } else {
     currentItems = activeTab === 'movies' ? trendingMovies : trendingShows;
   }
@@ -135,7 +155,6 @@ export default function Home({ trendingMovies, trendingShows }) {
         <header style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '15px', borderBottom: '2px solid #111', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <h1 style={{ color: '#e50914', fontSize: '30px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
           
-          {/* خانة البحث المدعومة للريموت والتلفزيون */}
           <div style={{ position: 'relative', width: '100%', maxWidth: '350px' }}>
             <input 
               type="text" 
