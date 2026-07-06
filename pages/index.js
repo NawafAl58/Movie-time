@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/router';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -47,6 +47,7 @@ export async function getServerSideProps() {
 }
 
 export default function Home({ initialMovies, initialShows }) {
+  const router = useRouter();
   const [lang, setLang] = useState('en'); 
   const [activeTab, setActiveTab] = useState('movies'); 
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,28 +97,32 @@ export default function Home({ initialMovies, initialShows }) {
         {activeTab === 'live' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
             {FREE_LIVE_CHANNELS.map((channel) => (
-              <Link href={`/movie/${channel.id}?type=live&url=${encodeURIComponent(channel.url)}&streamType=${channel.type}`} key={channel.id} style={{ textDecoration: 'none' }}>
-                <div style={{ backgroundColor: '#111', borderRadius: '12px', overflow: 'hidden', border: '2px solid #222', cursor: 'pointer', textAlign: 'center', paddingBottom: '15px' }}>
-                  <div style={{ position: 'relative', width: '100%', height: '120px' }}>
-                    <img src={channel.logo} alt={channel.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
-                    <span style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '10px', backgroundColor: '#e50914', color: 'white', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>LIVE</span>
-                  </div>
-                  <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '15px 10px 0 10px', color: '#fff' }}>{channel.name}</h4>
+              <div 
+                key={channel.id}
+                onClick={() => router.push(`/movie/${channel.id}?type=live&url=${encodeURIComponent(channel.url)}&streamType=${channel.type}`)}
+                style={{ backgroundColor: '#111', borderRadius: '12px', overflow: 'hidden', border: '2px solid #222', cursor: 'pointer', textAlign: 'center', paddingBottom: '15px' }}
+              >
+                <div style={{ position: 'relative', width: '100%', height: '120px' }}>
+                  <img src={channel.logo} alt={channel.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
+                  <span style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '10px', backgroundColor: '#e50914', color: 'white', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>LIVE</span>
                 </div>
-              </Link>
+                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '15px 10px 0 10px', color: '#fff' }}>{channel.name}</h4>
+              </div>
             ))}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
             {(activeTab === 'movies' ? trendingMovies : trendingShows).slice(0, 14).map((item) => (
-              <Link href={`/movie/${item.id}?type=${activeTab === 'movies' ? 'movie' : 'tv'}`} key={item.id} style={{ textDecoration: 'none' }}>
-                <div style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer' }}>
-                  <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
-                  <div style={{ padding: '10px' }}>
-                    <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white' }}>{item.title || item.name}</h4>
-                  </div>
+              <div 
+                key={item.id}
+                onClick={() => router.push(`/movie/${item.id}?type=${activeTab === 'movies' ? 'movie' : 'tv'}`)}
+                style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer' }}
+              >
+                <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
+                <div style={{ padding: '10px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white' }}>{item.title || item.name}</h4>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
