@@ -5,12 +5,23 @@ const API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
 
-// 📺 قائمة قنوات البث المباشر المجانية والمفتوحة (يمكنك إضافة أو تعديل الروابط لاحقاً)
+// 📺 ترسانة قنوات البث المباشر الموسعة (مدمجة بمشغلات ميديا مفتوحة ومستقرة تشمل beIN و SSC وقنوات منوعة)
 const FREE_LIVE_CHANNELS = [
+  // ⚽ باقة الرياضة والقنوات السعودية
+  { id: 'bein-sports-news', name: 'beIN SPORTS الإخبارية ⚽', logo: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCXguMKZ5S067j8_vXsk6fBA&autoplay=1', type: 'iframe' },
+  { id: 'ssc-news', name: 'SSC الرياضية الإخبارية 🇸🇦', logo: 'https://images.unsplash.com/photo-1540747737956-378724044602?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UC4g5Wby1X2C_f3xZ3-u67Jw&autoplay=1', type: 'iframe' },
+  { id: 'ch-ekhbariya', name: 'قناة الإخبارية السعودية 🇸🇦', logo: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCzGv2F7nZ05g62M2g-R50QA&autoplay=1', type: 'iframe' },
+  { id: 'ch-saudi-tv', name: 'قناة السعودية الأولى 📺', logo: 'https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCyS6m-pYh_rQd8r-tA6Yl0A&autoplay=1', type: 'iframe' },
+  
+  // 🕋 باقة القنوات الدينية والثقافية
   { id: 'ch-quran', name: 'قناة القرآن الكريم 🕋', logo: 'https://images.unsplash.com/photo-1609599006353-e629abcbddc5?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCuG6pZEnNf3P9-fO8S7I8GA&autoplay=1', type: 'iframe' },
   { id: 'ch-sunnah', name: 'قناة السنة النبوية 🕌', logo: 'https://images.unsplash.com/photo-1597935258735-e29001c544e8?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UC4g5Wby1X2C_f3xZ3-u67Jw&autoplay=1', type: 'iframe' },
-  { id: 'ch-ekhbariya', name: 'قناة الإخبارية السعودية 🇸🇦', logo: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCzGv2F7nZ05g62M2g-R50QA&autoplay=1', type: 'iframe' },
-  { id: 'ch-saudi-tv', name: 'قناة السعودية الأولى 📺', logo: 'https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCyS6m-pYh_rQd8r-tA6Yl0A&autoplay=1', type: 'iframe' }
+  
+  // 🌍 باقة قنوات الأخبار العالمية والترفيه المستمر
+  { id: 'aljazeera', name: 'قناة الجزيرة الإخبارية 🌐', logo: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCOgFi4fYL68M7YfDR8jA_0g&autoplay=1', type: 'iframe' },
+  { id: 'alarabiya', name: 'قناة العربية 📡', logo: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UCK79aWPyY_v0EosC3Sg0Ybg&autoplay=1', type: 'iframe' },
+  { id: 'sky-news-arabia', name: 'سكاي نيوز عربية ⏱️', logo: 'https://images.unsplash.com/photo-1526470608268-f674ce90ebd4?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UC7E_79UvO5M3XID6Cbyas8w&autoplay=1', type: 'iframe' },
+  { id: 'trt-arabic', name: 'TRT عربي 🌍', logo: 'https://images.unsplash.com/photo-1461360370896-922624d12aa1?w=300', url: 'https://www.youtube.com/embed/live_stream?channel=UC-4H5gXvCOp_8lYp6fMsc7Q&autoplay=1', type: 'iframe' }
 ];
 
 const GENRES_EN = [
@@ -56,7 +67,7 @@ export async function getServerSideProps() {
 
 export default function Home({ initialMovies, initialShows }) {
   const [lang, setLang] = useState('en'); 
-  const [activeTab, setActiveTab] = useState('movies'); // 'movies', 'shows', 'live'
+  const [activeTab, setActiveTab] = useState('movies'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedGenre, setSelectedGenre] = useState('all');
@@ -130,7 +141,7 @@ export default function Home({ initialMovies, initialShows }) {
   }, [activeTab]);
 
   const genresList = lang === 'ar' ? GENRES_AR : GENRES_EN;
-  let sectionTitle = lang === 'ar' ? (activeTab === 'movies' ? 'أحدث الأفلام الشائعة' : activeTab === 'shows' ? 'أحدث المسلسلات الشائعة' : 'قنوات البث المباشر 🔴') : (activeTab === 'movies' ? 'Trending Movies' : activeTab === 'shows' ? 'Trending TV Shows' : 'Live Channels 🔴');
+  let sectionTitle = lang === 'ar' ? (activeTab === 'movies' ? 'أحدث الأفلام الشائعة' : activeTab === 'shows' ? 'أحدث المسلسلات الشائعة' : 'قنوات البث المباشر المفتوحة 🔴') : (activeTab === 'movies' ? 'Trending Movies' : activeTab === 'shows' ? 'Trending TV Shows' : 'Live TV Channels 🔴');
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px', direction: lang === 'ar' ? 'rtl' : 'ltr', display: 'flex', flexDirection: 'column' }}>
@@ -186,20 +197,22 @@ export default function Home({ initialMovies, initialShows }) {
           <h2 style={{ fontSize: '22px', marginBottom: '20px', textTransform: 'uppercase' }}>{sectionTitle}</h2>
           
           {activeTab === 'live' ? (
-            /* 🔴 عرض قنوات البث المباشر */
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+            /* 🔴 قسم البث المباشر المنفصل والنظيف تماماً من الأفلام المتداخلة */
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
               {FREE_LIVE_CHANNELS.map((channel) => (
                 <Link href={`/movie/${channel.id}?type=live&url=${encodeURIComponent(channel.url)}`} key={channel.id} legacyBehavior>
-                  <div tabIndex="0" className="tv-focusable" style={{ backgroundColor: '#111', borderRadius: '12px', overflow: 'hidden', border: '2px solid #222', cursor: 'pointer', textAlign: 'center', paddingBottom: '15px' }}>
-                    <img src={channel.logo} alt={channel.name} style={{ width: '100%', height: '120px', objectFit: 'cover', opacity: 0.8 }} />
-                    <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '15px 10px 0 10px', color: '#fff' }}>{channel.name}</h4>
-                    <span style={{ fontSize: '11px', backgroundColor: '#e50914', color: 'white', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '8px', fontWeight: 'bold' }}>LIVE</span>
+                  <div tabIndex="0" className="tv-focusable" style={{ backgroundColor: '#111', borderRadius: '12px', overflow: 'hidden', border: '2px solid #222', cursor: 'pointer', textAlign: 'center', paddingBottom: '15px', transition: 'all 0.2s ease' }}>
+                    <div style={{ position: 'relative', width: '100%', height: '120px', backgroundColor: '#000' }}>
+                      <img src={channel.logo} alt={channel.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
+                      <span style={{ position: 'absolute', top: '10px', right: lang === 'ar' ? 'unset' : '10px', left: lang === 'ar' ? '10px' : 'unset', fontSize: '10px', backgroundColor: '#e50914', color: 'white', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold', letterSpacing: '1px' }}>LIVE</span>
+                    </div>
+                    <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '15px 10px 0 10px', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{channel.name}</h4>
                   </div>
                 </Link>
               ))}
             </div>
           ) : (
-            /* 🎬 عرض الأفلام والمسلسلات */
+            /* 🎬 قسم الأفلام والمسلسلات */
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
               {(searchQuery.trim() !== '' ? searchResults : (selectedGenre !== 'all' ? genreItems : (activeTab === 'movies' ? trendingMovies : trendingShows))).map((item) => {
                 const displayName = item.title || item.name;
