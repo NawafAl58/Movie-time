@@ -1,0 +1,32 @@
+{
+  "live_channels": [
+    {
+      "id": "bein-1",
+      "name": "beIN SPORTS 1 HD ⚽",
+      "logo": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=300",
+      "stream_url": "حط_هنا_رابط_البث_المباشر_للقناة.m3u8"
+    },
+    {
+      "id": "ssc-1",
+      "name": "SSC SPORTS 1 HD 🇸🇦",
+      "logo": "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=300",
+      "stream_url": "حط_هنا_رابط_البث_المباشر_للقناة.m3u8"
+    }
+  ],
+  "arabic_movies": [
+    {
+      "id": "ar-movie-1",
+      "title": "فيلم عربي جديد 🎬",
+      "poster": "https://via.placeholder.com/300x450",
+      "stream_url": "https://example.com/movie.mp4"
+    }
+  ],
+  "arabic_series": [
+    {
+      "id": "ar-series-1",
+      "title": "مسلسل سعودي 📺",
+      "poster": "https://via.placeholder.com/300x450",
+      "stream_url": "https://example.com/episode1.m3u8"
+    }
+  ]
+}
