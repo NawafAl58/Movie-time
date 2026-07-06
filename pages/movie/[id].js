@@ -5,7 +5,6 @@ const API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
-// 🚨 تم دمج روابط سيرفرات البث الحية من الرابط الذي أرسلته هنا مباشرة
 const customData = {
   "live_channels": [
     {
@@ -31,7 +30,8 @@ export async function getServerSideProps(context) {
   if (type === 'live') {
     return { 
       props: { 
-        liveData: { id, url: url || '', streamType: streamType || 'iframe' }, 
+        movieData: null, // 🛡️ تحديد null صريح لمنع فشل الـ Build
+        liveData: { id: id || '', url: url || '', streamType: streamType || 'iframe' }, 
         isCustom: true 
       } 
     };
@@ -41,10 +41,13 @@ export async function getServerSideProps(context) {
   try {
     const res = await fetch(`${BASE_URL}/${mediaType}/${id}?api_key=${API_KEY}&language=en-US`);
     const movieData = await res.json();
+    if (movieData && !movieData.success && movieData.status_message) {
+      return { props: { movieData: null, liveData: null, isCustom: false } };
+    }
     movieData.media_type_fixed = mediaType;
-    return { props: { movieData, isCustom: false } };
+    return { props: { movieData, liveData: null, isCustom: false } };
   } catch (error) {
-    return { props: { movieData: null, isCustom: false } };
+    return { props: { movieData: null, liveData: null, isCustom: false } };
   }
 }
 
@@ -61,6 +64,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   const [playerType, setPlayerType] = useState('iframe'); 
 
   const mediaType = movieData?.media_type_fixed || type || 'movie';
+  const currentId = id || liveData?.id;
 
   useEffect(() => {
     const savedLang = localStorage.getItem('site_lang') || 'en';
@@ -84,13 +88,11 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
       }
     };
     updateMovieLanguage();
-  }, [lang, movieData, isCustom]);
+  }, [lang, movieData, isCustom, mediaType]);
 
   useEffect(() => {
-    // 📺 تشغيل القنوات الحية المضافة من الرابط الممرر يدوياً
     if (isCustom && liveData) {
-      // التحقق من وجود القناة في المصفوفة المحلية المدمجة
-      const localChannel = customData.live_channels?.find(ch => ch.id === id);
+      const localChannel = customData.live_channels?.find(ch => ch.id === currentId);
       const targetUrl = localChannel ? localChannel.stream_url : liveData.url;
       const targetType = localChannel ? localChannel.stream_type : (liveData.streamType === 'iframe' ? 'iframe' : 'video');
 
@@ -105,6 +107,19 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
     const buildFullServersList = async () => {
       setIsLoading(true);
       const list = [];
+
+      const customMovie = customData.arabic_movies?.find(m => m.id === currentId);
+      const customSeries = customData.arabic_series?.find(s => s.id === currentId);
+      const customUrl = customMovie?.stream_url || customSeries?.stream_url;
+
+      if (customUrl) {
+        list.push({ 
+          id: 'custom-premium', 
+          name: lang === 'ar' ? '🚀 تشغيل الرابط المباشر الصافي الخاص بك' : '🚀 Playing Your Custom Direct Link', 
+          url: customUrl, 
+          type: 'video' 
+        });
+      }
 
       if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
         try {
@@ -197,7 +212,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
     };
 
     buildFullServersList();
-  }, [movie, isCustom]);
+  }, [movie, isCustom, currentId, mediaType, lang]);
 
   const handleServerChange = (serverId, serverUrl, srvType) => {
     setActiveServerId(serverId);
@@ -207,7 +222,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
   if (!isCustom && !movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
 
-  const displayTitle = isCustom ? (id === 'bein-1' ? 'beIN SPORTS HD 1 ⚽' : id === 'bein-2' ? 'beIN SPORTS HD 2 ⚽' : 'بث مباشر 🔴') : (movie.title || movie.name);
+  const displayTitle = isCustom ? (currentId === 'bein-1' ? 'beIN SPORTS HD 1 ⚽' : currentId === 'bein-2' ? 'beIN SPORTS HD 2 ⚽' : 'بث مباشر 🔴') : (movie?.title || movie?.name || 'Unknown Content');
   const displayRelease = movie?.release_date || movie?.first_air_date || 'LIVE';
   const currentActiveServer = servers.find(s => s.id === activeServerId);
 
@@ -238,7 +253,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isLoading ? '🔍 جاري الاتصال بالبث...' : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 ${currentActiveServer?.name}`}
+          {isLoading ? '🔍 جاري الاتصال بالبث...' : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 ${currentActiveServer?.name || ''}`}
         </h3>
 
         <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
