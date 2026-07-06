@@ -1,26 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+// 🚨 استيراد ملف الروابط اليدوي لقراءة القنوات والأعمال العربية والسعودية الخاصة بك
+import customData from '../../arabicStreams.json';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
-  const { id, type } = context.query;
+  const { id, type, url, streamType } = context.query;
+  
+  // إذا كان القادم بثاً مباشراً ممرراً عبر لوحة التحكم المخصصة
+  if (type === 'live') {
+    return { 
+      props: { 
+        liveData: { id, url: url || '', streamType: streamType || 'hls' }, 
+        isCustom: true 
+      } 
+    };
+  }
+
   const mediaType = type === 'tv' ? 'tv' : 'movie';
   try {
     const res = await fetch(`${BASE_URL}/${mediaType}/${id}?api_key=${API_KEY}&language=en-US`);
     const movieData = await res.json();
     movieData.media_type_fixed = mediaType;
-    return { props: { movieData } };
+    return { props: { movieData, isCustom: false } };
   } catch (error) {
-    return { props: { movieData: null } };
+    return { props: { movieData: null, isCustom: false } };
   }
 }
 
-export default function MovieDetail({ movieData }) {
+export default function MovieDetail({ movieData, liveData, isCustom }) {
   const router = useRouter();
-  const { type } = router.query;
+  const { id, type } = router.query;
   const [movie, setMovie] = useState(movieData);
   const [lang, setLang] = useState('en');
   const [streamUrl, setStreamUrl] = useState('');
@@ -28,12 +41,14 @@ export default function MovieDetail({ movieData }) {
   
   const [servers, setServers] = useState([]);
   const [activeServerId, setActiveServerId] = useState('');
+  const [playerType, setPlayerType] = useState('iframe'); // 'iframe' أو 'video'
 
   const mediaType = movieData?.media_type_fixed || type || 'movie';
 
   useEffect(() => {
     const savedLang = localStorage.getItem('site_lang') || 'en';
     setLang(savedLang);
+    if (isCustom) return;
 
     const updateMovieLanguage = async () => {
       if (!movieData) return;
@@ -52,16 +67,38 @@ export default function MovieDetail({ movieData }) {
       }
     };
     updateMovieLanguage();
-  }, [lang, movieData]);
+  }, [lang, movieData, isCustom]);
 
   useEffect(() => {
+    // 🛠️ 1. نظام تشغيل البث المباشر المخصص يدويّاً
+    if (isCustom && liveData) {
+      setStreamUrl(liveData.url);
+      setPlayerType(liveData.streamType === 'iframe' ? 'iframe' : 'video');
+      setIsLoading(false);
+      return;
+    }
+
     if (!movie) return;
 
     const buildFullServersList = async () => {
       setIsLoading(true);
       const list = [];
 
-      // 🚨 1. إذا كان المحتوى عربي أو سعودي (حقن كافة السيرفرات العربية المعروفة والمفتوحة)
+      // 🔍 فحص ذكي: هل هذا الـ ID موجود ومرفوع في لوحة تحكم ملفك المخصص؟
+      const customMovie = customData.arabic_movies?.find(m => m.id === id);
+      const customSeries = customData.arabic_series?.find(s => s.id === id);
+      const customUrl = customMovie?.stream_url || customSeries?.stream_url;
+
+      if (customUrl) {
+        list.push({ 
+          id: 'custom-premium', 
+          name: lang === 'ar' ? '🚀 تشغيل الرابط المباشر الصافي الخاص بك' : '🚀 Playing Your Custom Direct Link', 
+          url: customUrl, 
+          type: 'video' 
+        });
+      }
+
+      // 🚨 2. إذا كان المحتوى عربي أو سعودي (إبقاء السيرفرات الاحتياطية القديمة)
       if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
         try {
           const response = await fetch(`https://api.vidsrc.pm/v1/${mediaType}/${movie.id}`);
@@ -82,12 +119,13 @@ export default function MovieDetail({ movieData }) {
         if (list.length > 0) {
           setActiveServerId(list[0].id);
           setStreamUrl(list[0].url);
+          setPlayerType(list[0].type);
         }
         setIsLoading(false);
         return;
       }
 
-      // 🌐 2. إذا كان المحتوى أجنبي (حقن السيرفرات البريميوم + كافة سيرفرات الـ Embed العالمية المفتوحة)
+      // 🌐 3. إذا كان المحتوى أجنبي (نفس آليتك القديمة المستقرة تماماً بـ Real-Debrid)
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
 
@@ -138,7 +176,7 @@ export default function MovieDetail({ movieData }) {
         }
       } catch (err) {}
 
-      // ترسانة السيرفرات الأجنبية العالمية الكاملة
+      // السيرفرات العالمية المفتوحة للاحتياط الأجنبي
       list.push({ id: 'vidsrc-su', name: 'Server SU (Multi-Lang)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
       list.push({ id: 'vidsrc-to', name: 'Server TO (Auto-Subs)', url: `https://vidsrc.to/embed/${mediaType}/${movie.id}`, type: 'iframe' });
       list.push({ id: 'vidsrc-me', name: 'Server ME (Fast Load)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
@@ -150,22 +188,24 @@ export default function MovieDetail({ movieData }) {
       if (list.length > 0) {
         setActiveServerId(list[0].id);
         setStreamUrl(list[0].url);
+        setPlayerType(list[0].type);
       }
       setIsLoading(false);
     };
 
     buildFullServersList();
-  }, [movie]);
+  }, [movie, isCustom]);
 
-  const handleServerChange = (serverId, serverUrl) => {
+  const handleServerChange = (serverId, serverUrl, srvType) => {
     setActiveServerId(serverId);
     setStreamUrl(serverUrl);
+    setPlayerType(srvType || 'iframe');
   };
 
-  if (!movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
+  if (!isCustom && !movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
 
-  const displayTitle = movie.title || movie.name;
-  const displayRelease = movie.release_date || movie.first_air_date;
+  const displayTitle = isCustom ? (id === 'bein-1' ? 'beIN SPORTS 1 HD ⚽' : id === 'ssc-1' ? 'SSC SPORTS 1 HD 🇸🇦' : 'بث مباشر 🔴') : (movie.title || movie.name);
+  const displayRelease = movie?.release_date || movie?.first_air_date || 'LIVE';
   const currentActiveServer = servers.find(s => s.id === activeServerId);
 
   return (
@@ -182,35 +222,38 @@ export default function MovieDetail({ movieData }) {
         {lang === 'ar' ? '← العودة للرئيسية' : '← Back to Home'}
       </button>
 
-      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginBottom: '30px' }}>
-        <img 
-          src={movie.poster_path ? `https://image.tmdb.org/t/p/w300${movie.poster_path}` : 'https://via.placeholder.com/300x450'} 
-          alt={displayTitle} 
-          style={{ borderRadius: '12px', width: '220px', objectFit: 'cover' }}
-        />
-        <div style={{ flex: 1, minWidth: '300px' }}>
-          <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
-          <p style={{ color: '#aaa', fontSize: '14px' }}>{lang === 'ar' ? 'تاريخ الإصدار:' : 'Release Date:'} {displayRelease} | ⭐ {movie.vote_average?.toFixed(1)}</p>
-          
-          <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderLeft: '4px solid #e50914', borderRight: lang === 'ar' ? '4px solid #e50914' : 'none', fontSize: '13px', color: '#e50914', fontWeight: 'bold', letterSpacing: '1px' }}>
-            {lang === 'ar' ? 'حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي' : 'Streaming Rights Reserved to: Nawaf Al-Nazawi'}
-          </div>
+      {!isCustom && movie && (
+        <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginBottom: '30px' }}>
+          <img 
+            src={movie.poster_path ? `https://image.tmdb.org/t/p/w300${movie.poster_path}` : 'https://via.placeholder.com/300x450'} 
+            alt={displayTitle} 
+            style={{ borderRadius: '12px', width: '220px', objectFit: 'cover' }}
+          />
+          <div style={{ flex: 1, minWidth: '300px' }}>
+            <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
+            <p style={{ color: '#aaa', fontSize: '14px' }}>{lang === 'ar' ? 'تاريخ الإصدار:' : 'Release Date:'} {displayRelease} | ⭐ {movie.vote_average?.toFixed(1)}</p>
+            
+            <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderLeft: '4px solid #e50914', borderRight: lang === 'ar' ? '4px solid #e50914' : 'none', fontSize: '13px', color: '#e50914', fontWeight: 'bold', letterSpacing: '1px' }}>
+              {lang === 'ar' ? 'حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي' : 'Streaming Rights Reserved to: Nawaf Al-Nazawi'}
+            </div>
 
-          <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>
-            {movie.overview || (lang === 'ar' ? "لا يوجد وصف متوفر." : "No overview available.")}
-          </p>
+            <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>
+              {movie.overview || (lang === 'ar' ? "لا يوجد وصف متوفر." : "No overview available.")}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isLoading ? (lang === 'ar' ? '🔍 جاري فحص وجلب أفضل سيرفر متاح...' : '🔍 Scanning & Selecting Best Server...') : `🍿 ${currentActiveServer?.name}`}
+          {isLoading ? (lang === 'ar' ? '🔍 جاري الاتصال بالبث...' : '🔍 Connecting to stream...') : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 ${currentActiveServer?.name}`}
         </h3>
 
         <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
-          ) : currentActiveServer?.type === 'video' ? (
+          ) : playerType === 'video' ? (
+            /* 🎥 المشغل المباشر الداخلي الصافي للروابط المباشرة وتجنب الحظر */
             <video 
               src={streamUrl} 
               controls 
@@ -227,7 +270,7 @@ export default function MovieDetail({ movieData }) {
           )}
         </div>
 
-        {!isLoading && servers.length > 0 && (
+        {!isCustom && !isLoading && servers.length > 0 && (
           <div>
             <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px', fontWeight: 'bold' }}>
               {lang === 'ar' ? '🎛️ قائمة السيرفرات المتوفرة بالكامل (اختر يدوياً إذا رغبت بالتبديل):' : '🎛️ Available Servers List (Switch manually if desired):'}
@@ -236,28 +279,7 @@ export default function MovieDetail({ movieData }) {
               {servers.map((srv) => (
                 <button
                   key={srv.id}
-                  onClick={() => handleServerChange(srv.id, srv.url)}
+                  onClick={() => handleServerChange(srv.id, srv.url, srv.type)}
                   style={{
                     backgroundColor: activeServerId === srv.id ? '#e50914' : '#111',
-                    color: '#fff',
-                    border: activeServerId === srv.id ? '1px solid #e50914' : '1px solid #333',
-                    padding: '10px 18px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    fontWeight: 'bold',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseOver={(e) => { if(activeServerId !== srv.id) e.target.style.borderColor = '#e50914'; }}
-                  onMouseOut={(e) => { if(activeServerId !== srv.id) e.target.style.borderColor = '#333'; }}
-                >
-                  {srv.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+                    color: '#fff
