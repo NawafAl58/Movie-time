@@ -54,11 +54,26 @@ export default function Home({ initialMovies, initialShows }) {
   const [searchResults, setSearchResults] = useState([]);
   const [selectedGenre, setSelectedGenre] = useState('all');
   const [genreItems, setGenreItems] = useState([]);
+  
+  // ⚙️ تم إعادة تعريف الـ States المفقودة هنا لإنهاء مشكلة الـ ReferenceError فوراً
+  const [trendingMovies, setTrendingMovies] = useState(initialMovies || []);
+  const [trendingShows, setTrendingShows] = useState(initialShows || []);
 
   useEffect(() => {
     const savedLang = localStorage.getItem('site_lang') || 'en';
     setLang(savedLang);
   }, []);
+
+  useEffect(() => {
+    const refreshTrending = async () => {
+      const currentLang = lang === 'ar' ? 'ar-SA' : 'en-US';
+      const movies = await fetchMultiplePages(`${BASE_URL}/trending/movie/week?api_key=${API_KEY}&language=${currentLang}`);
+      const shows = await fetchMultiplePages(`${BASE_URL}/trending/tv/week?api_key=${API_KEY}&language=${currentLang}`);
+      setTrendingMovies(movies);
+      setTrendingShows(shows);
+    };
+    refreshTrending();
+  }, [lang]);
 
   const genresList = lang === 'ar' ? GENRES_AR : GENRES_EN;
   let sectionTitle = lang === 'ar' ? (activeTab === 'movies' ? 'أحدث الأفلام الشائعة' : activeTab === 'shows' ? 'أحدث المسلسلات الشائعة' : 'الباقة الرياضية الحية 🔴') : (activeTab === 'movies' ? 'Trending Movies' : activeTab === 'shows' ? 'Trending TV Shows' : 'Live Sports Channels 🔴');
@@ -98,10 +113,10 @@ export default function Home({ initialMovies, initialShows }) {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
-            {trendingMovies.slice(0, 14).map((item) => (
-              <Link href={`/movie/${item.id}?type=movie`} key={item.id} legacyBehavior>
+            {(activeTab === 'movies' ? trendingMovies : trendingShows).slice(0, 14).map((item) => (
+              <Link href={`/movie/${item.id}?type=${activeTab === 'movies' ? 'movie' : 'tv'}`} key={item.id} legacyBehavior>
                 <div style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer' }}>
-                  <img src={`${IMAGE_URL}${item.poster_path}`} alt={item.title} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
+                  <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
                   <div style={{ padding: '10px' }}>
                     <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title || item.name}</h4>
                   </div>
