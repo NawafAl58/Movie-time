@@ -1,20 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-// 🚨 استيراد ملف الروابط اليدوي لقراءة القنوات والأعمال العربية والسعودية الخاصة بك
-import customData from '../../arabicStreams.json';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
+// 🚨 تم دمج روابط سيرفرات البث الحية من الرابط الذي أرسلته هنا مباشرة
+const customData = {
+  "live_channels": [
+    {
+      "id": "bein-1",
+      "name": "beIN SPORTS HD 1 (Main Stream) ⚽",
+      "stream_url": "https://top.bodr.online/investing-in-emerging-markets-identifying-high-growth-opportunitiessss/",
+      "stream_type": "iframe"
+    },
+    {
+      "id": "bein-2",
+      "name": "beIN SPORTS HD 2 (Backup Stream) ⚽",
+      "stream_url": "https://top.bodr.online/investing-in-emerging-markets-identifying-high-growth-opportunitiessss/",
+      "stream_type": "iframe"
+    }
+  ],
+  "arabic_movies": [],
+  "arabic_series": []
+};
+
 export async function getServerSideProps(context) {
   const { id, type, url, streamType } = context.query;
   
-  // إذا كان القادم بثاً مباشراً ممرراً عبر لوحة التحكم المخصصة
   if (type === 'live') {
     return { 
       props: { 
-        liveData: { id, url: url || '', streamType: streamType || 'hls' }, 
+        liveData: { id, url: url || '', streamType: streamType || 'iframe' }, 
         isCustom: true 
       } 
     };
@@ -41,7 +58,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   
   const [servers, setServers] = useState([]);
   const [activeServerId, setActiveServerId] = useState('');
-  const [playerType, setPlayerType] = useState('iframe'); // 'iframe' أو 'video'
+  const [playerType, setPlayerType] = useState('iframe'); 
 
   const mediaType = movieData?.media_type_fixed || type || 'movie';
 
@@ -70,10 +87,15 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   }, [lang, movieData, isCustom]);
 
   useEffect(() => {
-    // 🛠️ 1. نظام تشغيل البث المباشر المخصص يدويّاً
+    // 📺 تشغيل القنوات الحية المضافة من الرابط الممرر يدوياً
     if (isCustom && liveData) {
-      setStreamUrl(liveData.url);
-      setPlayerType(liveData.streamType === 'iframe' ? 'iframe' : 'video');
+      // التحقق من وجود القناة في المصفوفة المحلية المدمجة
+      const localChannel = customData.live_channels?.find(ch => ch.id === id);
+      const targetUrl = localChannel ? localChannel.stream_url : liveData.url;
+      const targetType = localChannel ? localChannel.stream_type : (liveData.streamType === 'iframe' ? 'iframe' : 'video');
+
+      setStreamUrl(targetUrl);
+      setPlayerType(targetType);
       setIsLoading(false);
       return;
     }
@@ -84,21 +106,6 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
       setIsLoading(true);
       const list = [];
 
-      // 🔍 فحص ذكي: هل هذا الـ ID موجود ومرفوع في لوحة تحكم ملفك المخصص؟
-      const customMovie = customData.arabic_movies?.find(m => m.id === id);
-      const customSeries = customData.arabic_series?.find(s => s.id === id);
-      const customUrl = customMovie?.stream_url || customSeries?.stream_url;
-
-      if (customUrl) {
-        list.push({ 
-          id: 'custom-premium', 
-          name: lang === 'ar' ? '🚀 تشغيل الرابط المباشر الصافي الخاص بك' : '🚀 Playing Your Custom Direct Link', 
-          url: customUrl, 
-          type: 'video' 
-        });
-      }
-
-      // 🚨 2. إذا كان المحتوى عربي أو سعودي (إبقاء السيرفرات الاحتياطية القديمة)
       if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
         try {
           const response = await fetch(`https://api.vidsrc.pm/v1/${mediaType}/${movie.id}`);
@@ -125,7 +132,6 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
         return;
       }
 
-      // 🌐 3. إذا كان المحتوى أجنبي (نفس آليتك القديمة المستقرة تماماً بـ Real-Debrid)
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
 
@@ -176,13 +182,10 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
         }
       } catch (err) {}
 
-      // السيرفرات العالمية المفتوحة للاحتياط الأجنبي
       list.push({ id: 'vidsrc-su', name: 'Server SU (Multi-Lang)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
       list.push({ id: 'vidsrc-to', name: 'Server TO (Auto-Subs)', url: `https://vidsrc.to/embed/${mediaType}/${movie.id}`, type: 'iframe' });
       list.push({ id: 'vidsrc-me', name: 'Server ME (Fast Load)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
       list.push({ id: 'vidsrc-cc', name: 'Server CC (Backup HQ)', url: `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-      list.push({ id: 'autoembed-global', name: 'Server AutoEmbed', url: `https://autoembed.to/${mediaType}/tmdb/${movie.id}`, type: 'iframe' });
-      list.push({ id: 'vidapi-global', name: 'Server VidApi Stream', url: `https://vidapi.stream/embed/${mediaType}/${movie.id}`, type: 'iframe' });
 
       setServers(list);
       if (list.length > 0) {
@@ -204,7 +207,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
   if (!isCustom && !movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
 
-  const displayTitle = isCustom ? (id === 'bein-1' ? 'beIN SPORTS 1 HD ⚽' : id === 'ssc-1' ? 'SSC SPORTS 1 HD 🇸🇦' : 'بث مباشر 🔴') : (movie.title || movie.name);
+  const displayTitle = isCustom ? (id === 'bein-1' ? 'beIN SPORTS HD 1 ⚽' : id === 'bein-2' ? 'beIN SPORTS HD 2 ⚽' : 'بث مباشر 🔴') : (movie.title || movie.name);
   const displayRelease = movie?.release_date || movie?.first_air_date || 'LIVE';
   const currentActiveServer = servers.find(s => s.id === activeServerId);
 
@@ -215,71 +218,51 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
         html, body, #__next { margin: 0 !important; padding: 0 !important; background-color: #050505 !important; background: #050505 !important; }
       `}</style>
 
-      <button 
-        onClick={() => router.push('/')} 
-        style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}
-      >
+      <button onClick={() => router.push('/')} style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}>
         {lang === 'ar' ? '← العودة للرئيسية' : '← Back to Home'}
       </button>
 
       {!isCustom && movie && (
         <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginBottom: '30px' }}>
-          <img 
-            src={movie.poster_path ? `https://image.tmdb.org/t/p/w300${movie.poster_path}` : 'https://via.placeholder.com/300x450'} 
-            alt={displayTitle} 
-            style={{ borderRadius: '12px', width: '220px', objectFit: 'cover' }}
-          />
+          <img src={movie.poster_path ? `https://image.tmdb.org/t/p/w300${movie.poster_path}` : 'https://via.placeholder.com/300x450'} alt={displayTitle} style={{ borderRadius: '12px', width: '220px', objectFit: 'cover' }} />
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
             <p style={{ color: '#aaa', fontSize: '14px' }}>{lang === 'ar' ? 'تاريخ الإصدار:' : 'Release Date:'} {displayRelease} | ⭐ {movie.vote_average?.toFixed(1)}</p>
-            
-            <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderLeft: '4px solid #e50914', borderRight: lang === 'ar' ? '4px solid #e50914' : 'none', fontSize: '13px', color: '#e50914', fontWeight: 'bold', letterSpacing: '1px' }}>
+            <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderLeft: '4px solid #e50914', borderRight: lang === 'ar' ? '4px solid #e50914' : 'none', fontSize: '13px', color: '#e50914', fontWeight: 'bold' }}>
               {lang === 'ar' ? 'حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي' : 'Streaming Rights Reserved to: Nawaf Al-Nazawi'}
             </div>
-
-            <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>
-              {movie.overview || (lang === 'ar' ? "لا يوجد وصف متوفر." : "No overview available.")}
-            </p>
+            <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>{movie.overview || "No overview available."}</p>
           </div>
         </div>
       )}
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isLoading ? (lang === 'ar' ? '🔍 جاري الاتصال بالبث...' : '🔍 Connecting to stream...') : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 ${currentActiveServer?.name}`}
+          {isLoading ? '🔍 جاري الاتصال بالبث...' : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 ${currentActiveServer?.name}`}
         </h3>
 
         <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
           ) : playerType === 'video' ? (
-            /* 🎥 المشغل المباشر الداخلي الصافي للروابط المباشرة وتجنب الحظر */
-            <video 
-              src={streamUrl} 
-              controls 
-              autoPlay 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-            />
+            <video src={streamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : (
-            <iframe 
-              src={streamUrl} 
-              style={{ width: '100%', height: '100%', border: 'none' }} 
-              allowFullScreen
-              allow="autoplay; encrypted-media"
-            ></iframe>
+            <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen allow="autoplay; encrypted-media"></iframe>
           )}
         </div>
 
         {!isCustom && !isLoading && servers.length > 0 && (
           <div>
-            <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px', fontWeight: 'bold' }}>
-              {lang === 'ar' ? '🎛️ قائمة السيرفرات المتوفرة بالكامل (اختر يدوياً إذا رغبت بالتبديل):' : '🎛️ Available Servers List (Switch manually if desired):'}
-            </p>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {servers.map((srv) => (
-                <button
-                  key={srv.id}
-                  onClick={() => handleServerChange(srv.id, srv.url, srv.type)}
-                  style={{
-                    backgroundColor: activeServerId === srv.id ? '#e50914' : '#111',
-                    color: '#fff
+                <button key={srv.id} onClick={() => handleServerChange(srv.id, srv.url, srv.type)} style={{ backgroundColor: activeServerId === srv.id ? '#e50914' : '#111', color: '#fff', border: activeServerId === srv.id ? '1px solid #e50914' : '1px solid #333', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>
+                  {srv.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
