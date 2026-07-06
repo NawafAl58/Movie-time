@@ -5,7 +5,6 @@ const API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
 
-// 📺 باقة القنوات الرياضية الموسعة والمفتوحة المستقرة
 const FREE_LIVE_CHANNELS = [
   { id: 'bein-sports-1', name: 'beIN SPORTS 1 HD ⚽', logo: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=300', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', type: 'hls' },
   { id: 'bein-sports-2', name: 'beIN SPORTS 2 HD ⚽', logo: 'https://images.unsplash.com/photo-1540747737956-378724044602?w=300', url: 'https://cdn.theoplayer.com/video/elephants-dream/playlist.m3u8', type: 'hls' },
@@ -51,11 +50,8 @@ export default function Home({ initialMovies, initialShows }) {
   const [lang, setLang] = useState('en'); 
   const [activeTab, setActiveTab] = useState('movies'); 
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
   const [selectedGenre, setSelectedGenre] = useState('all');
-  const [genreItems, setGenreItems] = useState([]);
   
-  // ⚙️ تم إعادة تعريف الـ States المفقودة هنا لإنهاء مشكلة الـ ReferenceError فوراً
   const [trendingMovies, setTrendingMovies] = useState(initialMovies || []);
   const [trendingShows, setTrendingShows] = useState(initialShows || []);
 
@@ -100,26 +96,22 @@ export default function Home({ initialMovies, initialShows }) {
         {activeTab === 'live' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
             {FREE_LIVE_CHANNELS.map((channel) => (
-              <Link href={`/movie/${channel.id}?type=live&url=${encodeURIComponent(channel.url)}&streamType=${channel.type}`} key={channel.id} legacyBehavior>
-                <div style={{ backgroundColor: '#111', borderRadius: '12px', overflow: 'hidden', border: '2px solid #222', cursor: 'pointer', textAlign: 'center', paddingBottom: '15px' }}>
-                  <div style={{ position: 'relative', width: '100%', height: '120px' }}>
-                    <img src={channel.logo} alt={channel.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
-                    <span style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '10px', backgroundColor: '#e50914', color: 'white', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>LIVE</span>
-                  </div>
-                  <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '15px 10px 0 10px', color: '#fff' }}>{channel.name}</h4>
+              <Link href={`/movie/${channel.id}?type=live&url=${encodeURIComponent(channel.url)}&streamType=${channel.type}`} key={channel.id} style={{ display: 'block', textDecoration: 'none', backgroundColor: '#111', borderRadius: '12px', overflow: 'hidden', border: '2px solid #222', cursor: 'pointer', textAlign: 'center', paddingBottom: '15px' }}>
+                <div style={{ position: 'relative', width: '100%', height: '120px' }}>
+                  <img src={channel.logo} alt={channel.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
+                  <span style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '10px', backgroundColor: '#e50914', color: 'white', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>LIVE</span>
                 </div>
+                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '15px 10px 0 10px', color: '#fff' }}>{channel.name}</h4>
               </Link>
             ))}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
             {(activeTab === 'movies' ? trendingMovies : trendingShows).slice(0, 14).map((item) => (
-              <Link href={`/movie/${item.id}?type=${activeTab === 'movies' ? 'movie' : 'tv'}`} key={item.id} legacyBehavior>
-                <div style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer' }}>
-                  <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
-                  <div style={{ padding: '10px' }}>
-                    <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title || item.name}</h4>
-                  </div>
+              <Link href={`/movie/${item.id}?type=${activeTab === 'movies' ? 'movie' : 'tv'}`} key={item.id} style={{ display: 'block', textDecoration: 'none', backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer' }}>
+                <img src={item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/300x450'} alt={item.title || item.name} style={{ width: '100%', height: '210px', objectFit: 'cover' }}/>
+                <div style={{ padding: '10px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white' }}>{item.title || item.name}</h4>
                 </div>
               </Link>
             ))}
