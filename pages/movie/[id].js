@@ -1,5 +1,5 @@
 // pages/movie/[id].js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 
@@ -7,7 +7,6 @@ const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const RD_API_BASE = 'https://api.real-debrid.com/rest/1.0';
 
-// 💎 توكن Real-Debrid الشخصي
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
@@ -137,19 +136,32 @@ export async function getServerSideProps(context) {
 export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom, tmdbId, mediaTypeFixed, rdStatus }) {
   const router = useRouter();
   const [activeServer, setActiveServer] = useState(rdStatus === 'ready' ? 'debrid' : 'vidsrc_cc');
+  const playerRef = useRef(null);
 
   useEffect(() => {
-    // تشغيل مشغل Plyr برمجياً في المتصفح فقط عند اختيار سيرفر Debrid
+    let plyrInstance = null;
+
     if (activeServer === 'debrid' && resolvedStreamUrl && typeof window !== 'undefined') {
-      const initPlyr = async () => {
-        const Plyr = (await import('plyr')).default;
-        const player = new Plyr('#rd-native-player', {
-          controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'],
-          ratio: '16:9'
-        });
-        return () => player.destroy();
+      // حقن وحق الكود برمجياً داخل المتصفح فقط لتجنب أي مشاكل بالـ Build
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.polyfilled.min.js';
+      script.async = true;
+      
+      script.onload = () => {
+        if (window.Plyr && document.getElementById('rd-native-player')) {
+          plyrInstance = new window.Plyr('#rd-native-player', {
+            controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'],
+            ratio: '16:9'
+          });
+        }
       };
-      initPlyr();
+
+      document.body.appendChild(script);
+
+      return () => {
+        if (plyrInstance) plyrInstance.destroy();
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
     }
   }, [activeServer, resolvedStreamUrl]);
 
@@ -176,7 +188,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
       <Head>
-        {/* حقن ستايل مشغل Plyr الاحترافي لتفادي تشوهات الواجهة */}
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
       </Head>
       
@@ -230,7 +241,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
           {playerType === 'iptv-player' ? (
             <iframe src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen />
           ) : activeServer === 'debrid' && resolvedStreamUrl ? (
-            /* 🚀 المشغل الأصيل المباشر الذي يسحب البث باستخدام IP جهازك لتخطي قيود التايم أوت الخاص بفيرسيل */
             <video id="rd-native-player" playsInline controls autoPlay style={{ width: '100%', height: '100%' }}>
               <source src={resolvedStreamUrl} type="video/mp4" />
             </video>
