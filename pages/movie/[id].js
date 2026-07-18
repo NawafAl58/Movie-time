@@ -3,6 +3,8 @@ import { useRouter } from 'next/router';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
+
+// 💎 تم وضع توكن حسابك الفعال هنا لتشغيل الأفلام بجودة بريميوم صافية
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 const customData = {
@@ -22,8 +24,7 @@ const customData = {
     {
       "id": "iptv-custom-live",
       "name": "📺 قائمة كل بثوث وقنوات سيرفر IPTV الخاص بك",
-      // استخدام مشغل ويب خارجي نظيف ومفتوح المصدر لتفكيك القائمة وعرض كل القنوات داخل الـ iframe بدون إعلانات منبثقة
-      "stream_url": "https://player.vimeo.com/external/blank.html?url=https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8", 
+      "stream_url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8", 
       "stream_type": "iptv-player"
     }
   ],
@@ -100,13 +101,10 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   useEffect(() => {
     if (isCustom && liveData) {
       const localChannel = customData.live_channels?.find(ch => ch.id === currentId);
-      
-      // لتشغيل قائمة الـ M3U8 كاملة بكل البثوث، نمررها لمشغل ويب يدعم فك القوائم تلقائياً
       let targetUrl = localChannel ? localChannel.stream_url : liveData.url;
       let targetType = localChannel ? localChannel.stream_type : 'iframe';
 
       if (currentId === 'iptv-custom-live') {
-        // تضمين مشغل يعرض كامل البثوث المتواجدة بالملف
         targetUrl = `https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8")}`;
         targetType = 'iptv-player';
       }
@@ -275,7 +273,6 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
           ) : playerType === 'iptv-player' ? (
-            /* 📺 هنا يتم حقن المشغل الذكي لقراءة جميع قنوات ملف الـ IPTV حقك بدون أي مشاكل وبشكل كامل */
             <iframe 
               src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8")}`} 
               style={{ width: '100%', height: '100%', border: 'none' }} 
