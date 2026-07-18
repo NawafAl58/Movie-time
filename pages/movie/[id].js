@@ -80,7 +80,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
 
-  // 🚀 تم تصحيح الكلمة الزائدة هنا ليعمل البناء بنجاح
+  // 🚀 تحويل رابط التحميل المباشر إلى رابط مشغل ويب متوافق يمنع التحميل التلقائي ويشغل الفيلم فوراً داخل الموقع
   const embedPlayerUrl = resolvedStreamUrl 
     ? `https://vidlink.pro/embed/${movieData?.media_type_fixed || 'movie'}/${movieData?.id}?custom_link=${encodeURIComponent(resolvedStreamUrl)}`
     : '';
