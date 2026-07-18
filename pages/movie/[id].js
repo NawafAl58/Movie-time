@@ -1,3 +1,4 @@
+// pages/movie/[id].js
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 
@@ -5,7 +6,7 @@ const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const RD_API_BASE = 'https://api.real-debrid.com/rest/1.0';
 
-// 💎 توكن Real-Debrid الشخصي
+// 💎 توكن Real-Debrid الشخصي الخاص بك
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
@@ -51,6 +52,7 @@ export async function getServerSideProps(context) {
   let resolvedStreamUrl = '';
   let playerType = 'none';
 
+  // خطة فك التورنت الاحترافية عبر الـ API الرسمي
   if (movieData && imdbId) {
     try {
       const torrentioUrl = `https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`;
@@ -115,7 +117,7 @@ export async function getServerSideProps(context) {
         }
       }
     } catch (err) {
-      console.error("Real-Debrid Backend Pipeline Failed: ", err);
+      console.error("Real-Debrid Core Resolution Pipeline Failed: ", err);
     }
   }
 
@@ -138,7 +140,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   if (!isCustom && !movieData) {
     return (
       <div style={{ color: 'white', padding: '50px', textAlign: 'center', direction: 'rtl' }}>
-        <h2>⚠️ خطأ في البيانات</h2>
+        <h2>⚠️ خطأ في جلب البيانات</h2>
         <p>المحتوى غير موجود حالياً.</p>
         <button onClick={() => router.push('/')} style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#e50914', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>العودة للرئيسية</button>
       </div>
@@ -148,12 +150,11 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
 
-  // 🚀 السيرفر المتطور: دمج رابط Real-Debrid الصافي داخل مشغل متوافق يتخطى الـ CORS والـ 404 كلياً
-  const debridPlayerUrl = resolvedStreamUrl 
-    ? `https://vidlink.pro/embed/${mediaTypeFixed}/${tmdbId}?url=${encodeURIComponent(resolvedStreamUrl)}`
+  // 🚀 تحويل الرابط ليمر عبر السيرفر الداخلي المخصص لحل مشكلة الـ CORS والـ 404 نهائياً
+  const proxyStreamUrl = resolvedStreamUrl 
+    ? `/api/stream?url=${encodeURIComponent(resolvedStreamUrl)}`
     : '';
 
-  // السيرفر الاحتياطي العام
   const backupEmbedUrl = `https://vidlink.pro/embed/${mediaTypeFixed}/${tmdbId}`;
 
   return (
@@ -181,7 +182,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
         </div>
       )}
 
-      {/* أزرار السيرفرات التناوبية المستقرة */}
       {!isCustom && (
         <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
           <button 
@@ -195,7 +195,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               border: activeServer === 'debrid' ? '1px solid #e50914' : '1px solid #333'
             }}
           >
-            💎 مشغل Real-Debrid البريميوم المتطور {!resolvedStreamUrl && '(لم يعثر على كاش)'}
+            💎 مشغل Real-Debrid الجذري المباشر {!resolvedStreamUrl && '(لم يعثر على كاش)'}
           </button>
           
           <button 
@@ -214,7 +214,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 المشغل الحالي: ${activeServer === 'debrid' ? 'Real-Debrid المتكامل' : 'السيرفر الاحتياطي'}`}
+          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 المشغل الحالي: ${activeServer === 'debrid' ? 'Real-Debrid العكسي' : 'السيرفر الاحتياطي'}`}
         </h3>
 
         <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
@@ -224,16 +224,15 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen 
             />
-          ) : activeServer === 'debrid' && debridPlayerUrl ? (
-            /* 🚀 المشغل الذكي المستقر الذي يعالج الروابط الصافية بدون مشاكل CORS */
-            <iframe 
-              src={debridPlayerUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }} 
-              allowFullScreen 
-              allow="autoplay; encrypted-media; picture-in-picture"
+          ) : activeServer === 'debrid' && proxyStreamUrl ? (
+            /* 🚀 تشغيل عنصر الفيديو الأصيل عبر السيرفر الداخلي لكسر الحظر كلياً */
+            <video 
+              src={proxyStreamUrl}
+              controls 
+              autoPlay 
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : (
-            /* السيرفر الاحتياطي المباشر */
             <iframe 
               src={backupEmbedUrl}
               style={{ width: '100%', height: '100%', border: 'none' }} 
