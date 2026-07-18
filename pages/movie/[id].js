@@ -3,25 +3,20 @@ import { useRouter } from 'next/router';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
+
+// 🚨 حط هنا توكن الـ Debrid الخاص بك (سواءً Real-Debrid أو AllDebrid بعد تفعيله)
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
+// 🔴 لوحة تحكم القنوات الرياضية والبث المباشر الصافي الخاصة بك
 const customData = {
   "live_channels": [
     {
-      "id": "bein-1",
-      "name": "beIN SPORTS HD 1 (Main Stream) ⚽",
-      "stream_url": "https://top.bodr.online/investing-in-emerging-markets-identifying-high-growth-opportunitiessss/",
-      "stream_type": "iframe"
-    },
-    {
-      "id": "bein-2",
-      "name": "beIN SPORTS HD 2 (Backup Stream) ⚽",
-      "stream_url": "https://top.bodr.online/investing-in-emerging-markets-identifying-high-growth-opportunitiessss/",
-      "stream_type": "iframe"
+      "id": "sports-live-1",
+      "name": "الرياضية مباشر - سيرفر أصيل ⚽",
+      "stream_url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
+      "stream_type": "video" // تشغيل مباشر داخل مشغل الموقع بدون إعلانات
     }
-  ],
-  "arabic_movies": [],
-  "arabic_series": []
+  ]
 };
 
 export async function getServerSideProps(context) {
@@ -30,8 +25,8 @@ export async function getServerSideProps(context) {
   if (type === 'live') {
     return { 
       props: { 
-        movieData: null, // 🛡️ تحديد null صريح لمنع فشل الـ Build
-        liveData: { id: id || '', url: url || '', streamType: streamType || 'iframe' }, 
+        movieData: null,
+        liveData: { id: id || '', url: url || '', streamType: streamType || 'video' }, 
         isCustom: true 
       } 
     };
@@ -61,7 +56,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   
   const [servers, setServers] = useState([]);
   const [activeServerId, setActiveServerId] = useState('');
-  const [playerType, setPlayerType] = useState('iframe'); 
+  const [playerType, setPlayerType] = useState('video'); 
 
   const mediaType = movieData?.media_type_fixed || type || 'movie';
   const currentId = id || liveData?.id;
@@ -73,12 +68,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
     const updateMovieLanguage = async () => {
       if (!movieData) return;
-      if (movieData.original_language === 'ar' || movieData.origin_country?.includes('SA')) {
-        const arRes = await fetch(`${BASE_URL}/${mediaType}/${movieData.id}?api_key=${API_KEY}&language=ar-SA`);
-        const arData = await arRes.json();
-        arData.media_type_fixed = mediaType;
-        setMovie(arData);
-      } else if (savedLang === 'ar') {
+      if (savedLang === 'ar') {
         const arRes = await fetch(`${BASE_URL}/${mediaType}/${movieData.id}?api_key=${API_KEY}&language=ar-SA`);
         const arData = await arRes.json();
         arData.media_type_fixed = mediaType;
@@ -91,10 +81,11 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   }, [lang, movieData, isCustom, mediaType]);
 
   useEffect(() => {
+    // 📺 1. نظام تشغيل البث الرياضي المباشر الصافي
     if (isCustom && liveData) {
       const localChannel = customData.live_channels?.find(ch => ch.id === currentId);
       const targetUrl = localChannel ? localChannel.stream_url : liveData.url;
-      const targetType = localChannel ? localChannel.stream_type : (liveData.streamType === 'iframe' ? 'iframe' : 'video');
+      const targetType = localChannel ? localChannel.stream_type : 'video';
 
       setStreamUrl(targetUrl);
       setPlayerType(targetType);
@@ -104,49 +95,10 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
     if (!movie) return;
 
+    // 🌐 2. نظام جلب الأفلام والمسلسلات العالمية بجودة 4K الصافية عبر Debrid
     const buildFullServersList = async () => {
       setIsLoading(true);
       const list = [];
-
-      const customMovie = customData.arabic_movies?.find(m => m.id === currentId);
-      const customSeries = customData.arabic_series?.find(s => s.id === currentId);
-      const customUrl = customMovie?.stream_url || customSeries?.stream_url;
-
-      if (customUrl) {
-        list.push({ 
-          id: 'custom-premium', 
-          name: lang === 'ar' ? '🚀 تشغيل الرابط المباشر الصافي الخاص بك' : '🚀 Playing Your Custom Direct Link', 
-          url: customUrl, 
-          type: 'video' 
-        });
-      }
-
-      if (movie.original_language === 'ar' || movie.origin_country?.includes('SA')) {
-        try {
-          const response = await fetch(`https://api.vidsrc.pm/v1/${mediaType}/${movie.id}`);
-          const data = await response.json();
-          if (data && data.url) {
-            list.push({ id: 'native-ar', name: lang === 'ar' ? '🚀 سيرفر مباشر أصيل' : '🚀 Direct Native Stream', url: data.url, type: 'video' });
-          }
-        } catch (e) {}
-
-        list.push({ id: 'vidapi-ar', name: lang === 'ar' ? '🎬 سيرفر عربي 1 (VidApi)' : '🎬 Arab Server 1 (VidApi)', url: `https://vidapi.stream/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-        list.push({ id: 'arabembed-ar', name: lang === 'ar' ? '🍿 سيرفر عربي 2 (ArabEmbed)' : '🍿 Arab Server 2 (ArabEmbed)', url: `https://arabembed.org/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-        list.push({ id: 'autoembed-ar', name: lang === 'ar' ? '📺 سيرفر عربي 3 (AutoEmbed)' : '📺 Arab Server 3 (AutoEmbed)', url: `https://autoembed.to/${mediaType}/tmdb/${movie.id}`, type: 'iframe' });
-        list.push({ id: 'su-ar', name: lang === 'ar' ? '🌐 سيرفر عربي 4 (SU)' : '🌐 Arab Server 4 (SU)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-        list.push({ id: 'me-ar', name: lang === 'ar' ? '✨ سيرفر عربي 5 (ME)' : '✨ Arab Server 5 (ME)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-        list.push({ id: 'cc-ar', name: lang === 'ar' ? '🔥 سيرفر عربي 6 (CC)' : '🔥 Arab Server 6 (CC)', url: `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-
-        setServers(list);
-        if (list.length > 0) {
-          setActiveServerId(list[0].id);
-          setStreamUrl(list[0].url);
-          setPlayerType(list[0].type);
-        }
-        setIsLoading(false);
-        return;
-      }
-
       const queryName = movie.original_title || movie.original_name || movie.title || movie.name;
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
 
@@ -192,37 +144,40 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
               body: new URLSearchParams({ link: finalInfo.links[0] })
             });
             const finalPremiumData = await unrestrictRes.json();
-            list.push({ id: 'debrid-4k', name: lang === 'ar' ? '💎 سيرفر بريميوم صافي 4K (Debrid)' : '💎 Premium 4K Stream (Debrid)', url: finalPremiumData.download, type: 'video' });
+            list.push({ 
+              id: 'debrid-4k', 
+              name: lang === 'ar' ? '💎 سيرفر صافي عالي الجودة 4K (Premium)' : '💎 Premium 4K Pure Stream', 
+              url: finalPremiumData.download, 
+              type: 'video' 
+            });
           }
         }
       } catch (err) {}
 
-      list.push({ id: 'vidsrc-su', name: 'Server SU (Multi-Lang)', url: `https://vidsrc.su/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-      list.push({ id: 'vidsrc-to', name: 'Server TO (Auto-Subs)', url: `https://vidsrc.to/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-      list.push({ id: 'vidsrc-me', name: 'Server ME (Fast Load)', url: `https://vidsrc.me/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-      list.push({ id: 'vidsrc-cc', name: 'Server CC (Backup HQ)', url: `https://vidsrc.cc/v2/embed/${mediaType}/${movie.id}`, type: 'iframe' });
-
+      // في حال لم يتوفر رابط Debrid، يتم عرض رسالة جاري البحث أو سيرفر احتياطي نظيف
       setServers(list);
       if (list.length > 0) {
         setActiveServerId(list[0].id);
         setStreamUrl(list[0].url);
         setPlayerType(list[0].type);
+      } else {
+        setStreamUrl('');
       }
       setIsLoading(false);
     };
 
     buildFullServersList();
-  }, [movie, isCustom, currentId, mediaType, lang]);
+  }, [movie, isCustom, currentId, lang]);
 
   const handleServerChange = (serverId, serverUrl, srvType) => {
     setActiveServerId(serverId);
     setStreamUrl(serverUrl);
-    setPlayerType(srvType || 'iframe');
+    setPlayerType(srvType || 'video');
   };
 
   if (!isCustom && !movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
 
-  const displayTitle = isCustom ? (currentId === 'bein-1' ? 'beIN SPORTS HD 1 ⚽' : currentId === 'bein-2' ? 'beIN SPORTS HD 2 ⚽' : 'بث مباشر 🔴') : (movie?.title || movie?.name || 'Unknown Content');
+  const displayTitle = isCustom ? (customData.live_channels?.find(ch => ch.id === currentId)?.name || 'بث مباشر الرياضية ⚽') : (movie?.title || movie?.name || 'Premium Movie');
   const displayRelease = movie?.release_date || movie?.first_air_date || 'LIVE';
   const currentActiveServer = servers.find(s => s.id === activeServerId);
 
@@ -253,20 +208,25 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isLoading ? '🔍 جاري الاتصال بالبث...' : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 ${currentActiveServer?.name || ''}`}
+          {isLoading ? '🔍 جاري تهيئة مشغل الفيديو النظيف...' : isCustom ? `🔴 ${displayTitle}` : `🍿 ${currentActiveServer?.name || 'سيرفر بريميوم تلقائي'}`}
         </h3>
 
         <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
           {isLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Connecting to Premium Streams...</div>
+          ) : !streamUrl ? (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px' }}>
+              {lang === 'ar' ? '⚠️ عذراً، لم يتم العثور على رابط مباشر صافي لهذا المحتوى حالياً.' : '⚠️ Sorry, no direct premium stream found for this content.'}
+            </div>
           ) : playerType === 'video' ? (
+            /* 🎥 المشغل المباشر الصافي الحامي من الإعلانات تماماً */
             <video src={streamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : (
             <iframe src={streamUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen allow="autoplay; encrypted-media"></iframe>
           )}
         </div>
 
-        {!isCustom && !isLoading && servers.length > 0 && (
+        {!isCustom && !isLoading && servers.length > 1 && (
           <div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {servers.map((srv) => (
