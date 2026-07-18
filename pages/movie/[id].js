@@ -1,17 +1,20 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/router';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 
-// 💎 توكن Real-Debrid الخاص بك محمي ومحفوظ برمجياً
+// 💎 توكن Real-Debrid الخاص بك
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
+
+// دالة مساعدة لمنح السيرفر وقتاً لمعالجة البيانات
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function getServerSideProps(context) {
   const { id, type } = context.query;
   const mediaType = type === 'tv' ? 'tv' : 'movie';
   
-  // 1. إذا كان الطلب للبث المباشر IPTV
+  // 1. تشغيل البث المباشر IPTV
   if (type === 'live' || id === 'iptv-custom-live') {
     return { 
       props: { 
@@ -36,7 +39,7 @@ export async function getServerSideProps(context) {
     return { props: { movieData: null, resolvedStreamUrl: '', playerType: 'none', isCustom: false } };
   }
 
-  // 3. البحث عن التورنت وفك الرابط عبر سيرفر فيرسيل الآمن (تجنباً لـ CORS)
+  // 3. البحث عن التورنت وفك التشفير عبر Backend السيرفر
   let resolvedStreamUrl = '';
   let playerType = 'none';
   const queryName = movieData.original_title || movieData.original_name || movieData.title || movieData.name;
@@ -60,7 +63,7 @@ export async function getServerSideProps(context) {
     if (hash) {
       const magnetLink = `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(torrentName)}`;
       
-      // إضافة الماجنت إلى حسابك
+      // أ- إضافة الماجنت إلى Real-Debrid
       const addRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
@@ -69,21 +72,33 @@ export async function getServerSideProps(context) {
       const torrentInfo = await addRes.json();
 
       if (torrentInfo && torrentInfo.id) {
-        // اختيار كافة الملفات داخل التورنت
-        await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentInfo.id}`, {
+        const torrentId = torrentInfo.id;
+
+        // ب- انتظار قصير للتأكد من أن السيرفر استوعب الماجنت وتعرف على الملفات
+        await delay(1500);
+
+        // جـ- اختيار الملفات وتحديدها كـ "all"
+        await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
           body: new URLSearchParams({ files: 'all' })
         });
 
-        // جلب معلومات الملف بعد الاختيار للحصول على روابط التحميل
-        const infoRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentInfo.id}`, {
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-        });
-        const finalInfo = await infoRes.json();
+        // د- حلقة تحقق ذكية (حتى 3 محاولات) لانتظار توليد الروابط الجاهزة
+        let finalInfo = null;
+        for (let i = 0; i < 3; i++) {
+          await delay(1000);
+          const infoRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`, {
+            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
+          });
+          finalInfo = await infoRes.json();
+          if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
+            break;
+          }
+        }
         
+        // هـ- فك تشفير الرابط الأول الجاهز وتحويله لرابط تحميل مباشر وصافي
         if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
-          // توليد رابط المشاهدة المباشر والبريميوم
           const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
@@ -99,7 +114,7 @@ export async function getServerSideProps(context) {
       }
     }
   } catch (err) {
-    console.error("Server-side Debrid Error: ", err);
+    console.error("Server-side Error: ", err);
   }
 
   return {
@@ -114,9 +129,8 @@ export async function getServerSideProps(context) {
 
 export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom }) {
   const router = useRouter();
-  const [lang] = useState('ar'); 
 
-  if (!isCustom && !movieData) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
+  if (!isCustom && !movieData) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>المحتوى غير موجود.</div>;
 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
@@ -163,7 +177,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
             <video src={resolvedStreamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px', padding: '0 20px', textAlign: 'center' }}>
-              ⚠️ تم إرسال طلب فك تشفير التورنت إلى Real-Debrid بنجاح، يرجى تحديث الصفحة خلال ثوانٍ قليلة لتشغيل الفيلم بجودة صافية وبدون إعلانات.
+              ⚠️ عذراً، لم نتمكن من جلب ملف تورنت كاش متوافق مع حسابك لهذا الفيلم بشكل فوري، يرجى تجربة فيلم آخر أكثر شيوعاً للتحقق من عمل السيرفر.
             </div>
           )}
         </div>
