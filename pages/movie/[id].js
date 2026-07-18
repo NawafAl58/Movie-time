@@ -4,19 +4,19 @@ import { useRouter } from 'next/router';
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 
-// 🚨 ضع توكن حسابك في AllDebrid هنا لتشغيل الأفلام 4K الصافية
+// حط هنا توكن حساب AllDebrid أو Real-Debrid الخاص بك للأفلام
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
   const { id, type } = context.query;
   
-  if (type === 'live' || id === 'iptv-main') {
+  if (type === 'live' || id === 'iptv-live') {
     return { 
       props: { 
         movieData: null,
         liveData: { 
-          id: 'iptv-main', 
-          url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8', // 🔴 تم دمج رابط الـ IPTV حقك هنا مباشرة
+          id: 'iptv-live', 
+          url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8', // رابط الـ IPTV الخاص بك يعمل هنا فقط
           streamType: 'video' 
         }, 
         isCustom: true 
@@ -72,7 +72,6 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   }, [lang, movieData, isCustom, mediaType]);
 
   useEffect(() => {
-    // 📺 1. تشغيل رابط الـ IPTV المباشر والآمن الخاص بك
     if (isCustom && liveData) {
       setStreamUrl(liveData.url);
       setPlayerType('video');
@@ -82,7 +81,6 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
     if (!movie) return;
 
-    // 🌐 2. تشغيل الأفلام والمسلسلات بجودة بريميوم عبر Debrid ومنع التحويل الخارجي
     const buildFullServersList = async () => {
       setIsLoading(true);
       const list = [];
@@ -133,7 +131,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
             const finalPremiumData = await unrestrictRes.json();
             list.push({ 
               id: 'debrid-premium', 
-              name: lang === 'ar' ? '💎 سيرفر صافي عالي الجودة (Premium)' : '💎 Premium Pure Stream', 
+              name: lang === 'ar' ? '💎 سيرفر بريميوم 4K صافي' : '💎 Premium 4K Pure Stream', 
               url: finalPremiumData.download, 
               type: 'video' 
             });
@@ -155,31 +153,29 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
     buildFullServersList();
   }, [movie, isCustom, liveData, lang]);
 
-  if (!isCustom && !movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>المحتوى غير متوفر حالياً.</div>;
+  if (!isCustom && !movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>المحتوى غير متوفر.</div>;
 
-  const displayTitle = isCustom ? 'البث الحي المباشر الخاص بك 📺' : (movie?.title || movie?.name);
+  const displayTitle = isCustom ? 'البث الرياضي المباشر 📺' : (movie?.title || movie?.name);
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
-      
       <button onClick={() => router.push('/')} style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}>
         ← العودة للرئيسية
       </button>
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isLoading ? '🔍 جاري الاتصال بالبث وتشغيل الفيديو النظيف...' : `🍿 ${displayTitle}`}
+          {isLoading ? '🔍 جاري جلب البث المباشر المطور...' : `🔴 ${displayTitle}`}
         </h3>
 
-        <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
+        <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {isLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>جاري جلب البث المباشر...</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>جاري التحميل...</div>
           ) : !streamUrl ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px' }}>
-              ⚠️ عذراً، تأكد من تجديد أو إضافة توكن اشتراك Debrid الفعال لتشغيل هذا الفيلم بجودة صافية.
+              ⚠️ تأكد من إضافة توكن فعال لتشغيل الأفلام بجودة صافية.
             </div>
           ) : (
-            /* 🎥 مشغل داخلي محمي تماماً يمنع فتح أي موقع خارجي */
             <video src={streamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           )}
         </div>
