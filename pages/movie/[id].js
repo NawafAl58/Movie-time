@@ -1,6 +1,7 @@
 // pages/movie/[id].js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -52,7 +53,7 @@ export async function getServerSideProps(context) {
 
   let resolvedStreamUrl = '';
   let playerType = 'none';
-  let rdStatus = 'no_cache'; // الافتراضي: لم يعثر على كاش
+  let rdStatus = 'no_cache';
 
   if (movieData && imdbId) {
     try {
@@ -66,7 +67,6 @@ export async function getServerSideProps(context) {
           
           if (streamTarget) {
             if (streamTarget.infoHash) {
-              // 1. إضافة التورنت إلى حسابك
               const addRes = await fetch(`${RD_API_BASE}/torrents/addTorrent`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -77,7 +77,6 @@ export async function getServerSideProps(context) {
                 const addData = await addRes.json();
                 const torrentId = addData.id;
 
-                // 2. جلب حالة التورنت
                 const infoRes = await fetch(`${RD_API_BASE}/torrents/info/${torrentId}`, {
                   headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
                 });
@@ -85,15 +84,13 @@ export async function getServerSideProps(context) {
                 if (infoRes.ok) {
                   const infoData = await infoRes.json();
                   
-                  // 3. اختيار كل الملفات لبدء التشغيل/التحميل
                   await fetch(`${RD_API_BASE}/torrents/selectFiles/${torrentId}`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: `files=all`
                   });
 
-                  // فحص هل هو جاهز ومحمل كاش فعلياً (تخطي شاشة الـ 404)
-                  if (infoData.status === 'downloaded' && infoData.links && infoData.links.length > 0) {
+                  if (infoData.links && infoData.links.length > 0) {
                     const unrestrictRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
                       method: 'POST',
                       headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -107,7 +104,7 @@ export async function getServerSideProps(context) {
                       rdStatus = 'ready';
                     }
                   } else if (infoData.status === 'downloading') {
-                    rdStatus = 'downloading'; // التورنت جالس يتحمل الحين في حسابك من السيرفرات
+                    rdStatus = 'downloading';
                   }
                 }
               }
@@ -120,7 +117,7 @@ export async function getServerSideProps(context) {
         }
       }
     } catch (err) {
-      console.error("RD Engine Error: ", err);
+      console.error("RD Fetch Engine Error: ", err);
     }
   }
 
@@ -141,10 +138,25 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   const router = useRouter();
   const [activeServer, setActiveServer] = useState(rdStatus === 'ready' ? 'debrid' : 'vidsrc_cc');
 
+  useEffect(() => {
+    // تشغيل مشغل Plyr برمجياً في المتصفح فقط عند اختيار سيرفر Debrid
+    if (activeServer === 'debrid' && resolvedStreamUrl && typeof window !== 'undefined') {
+      const initPlyr = async () => {
+        const Plyr = (await import('plyr')).default;
+        const player = new Plyr('#rd-native-player', {
+          controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'],
+          ratio: '16:9'
+        });
+        return () => player.destroy();
+      };
+      initPlyr();
+    }
+  }, [activeServer, resolvedStreamUrl]);
+
   if (!isCustom && !movieData) {
     return (
       <div style={{ color: 'white', padding: '50px', textAlign: 'center', direction: 'rtl' }}>
-        <h2>⚠️ خطأ في البيانات</h2>
+        <h2>⚠️ خطأ في جلب البيانات</h2>
         <p>المحتوى غير موجود حالياً.</p>
         <button onClick={() => router.push('/')} style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#e50914', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>العودة للرئيسية</button>
       </div>
@@ -154,9 +166,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
 
-  // 🚀 مصفوفة السيرفرات البديلة لكسر الـ 404 نهائياً لأي فيلم
   const servers = {
-    debrid: resolvedStreamUrl ? `/api/stream?url=${encodeURIComponent(resolvedStreamUrl)}` : '',
     vidsrc_cc: `https://vidsrc.cc/v2/embed/${mediaTypeFixed}/${tmdbId}`,
     vidsrc_to: `https://vidsrc.to/embed/${mediaTypeFixed}/${tmdbId}`,
     vidlink: `https://vidlink.pro/embed/${mediaTypeFixed}/${tmdbId}`,
@@ -165,9 +175,14 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
+      <Head>
+        {/* حقن ستايل مشغل Plyr الاحترافي لتفادي تشوهات الواجهة */}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+      </Head>
       
       <style jsx global>{`
         html, body, #__next { margin: 0 !important; padding: 0 !important; background-color: #050505 !important; }
+        .plyr { border-radius: 8px; height: 100%; width: 100%; }
       `}</style>
 
       <button onClick={() => router.push('/')} style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}>
@@ -188,7 +203,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
         </div>
       )}
 
-      {/* ⚡ لوحة اختيار السيرفرات المتعددة لتفادي الـ 404 كلياً */}
       {!isCustom && (
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
           <button 
@@ -201,7 +215,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               border: '1px solid #333'
             }}
           >
-            💎 Real-Debrid Premium {rdStatus === 'downloading' && '(جاري الرفع للحساب ⏳)'} {rdStatus === 'no_cache' && '(بدون كاش)'}
+            💎 تشغيل عبر Real-Debrid الأصيل {rdStatus !== 'ready' && '(لا يوجد كاش)'}
           </button>
           
           <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>السيرفر الاحتياطي 1</button>
@@ -215,8 +229,11 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
         <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {playerType === 'iptv-player' ? (
             <iframe src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen />
-          ) : activeServer === 'debrid' && servers.debrid ? (
-            <video src={servers.debrid} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          ) : activeServer === 'debrid' && resolvedStreamUrl ? (
+            /* 🚀 المشغل الأصيل المباشر الذي يسحب البث باستخدام IP جهازك لتخطي قيود التايم أوت الخاص بفيرسيل */
+            <video id="rd-native-player" playsInline controls autoPlay style={{ width: '100%', height: '100%' }}>
+              <source src={resolvedStreamUrl} type="video/mp4" />
+            </video>
           ) : (
             <iframe src={servers[activeServer]} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen allow="autoplay; encrypted-media; picture-in-picture" />
           )}
