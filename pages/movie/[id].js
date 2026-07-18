@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
@@ -115,7 +115,7 @@ export async function getServerSideProps(context) {
         }
       }
     } catch (err) {
-      console.error("Real-Debrid Resolution Error: ", err);
+      console.error("Real-Debrid Backend Pipeline Failed: ", err);
     }
   }
 
@@ -133,58 +133,7 @@ export async function getServerSideProps(context) {
 
 export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom, tmdbId, mediaTypeFixed }) {
   const router = useRouter();
-  const videoRef = useRef(null);
-  const hlsRef = useRef(null);
-  
   const [activeServer, setActiveServer] = useState(resolvedStreamUrl ? 'debrid' : 'backup');
-  const [playbackError, setPlaybackError] = useState(false);
-
-  useEffect(() => {
-    // تدمير الكائن السابق تنظيفاً للذاكرة ومنع التداخل
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    setPlaybackError(false);
-
-    if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
-      const video = videoRef.current;
-      const isHlsUrl = resolvedStreamUrl.includes('.m3u8');
-
-      if (isHlsUrl) {
-        if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = resolvedStreamUrl;
-        } else {
-          // استدعاء آمن للمكتبة من CDN خارجي لتجنب أخطاء البناء في فيرسيل
-          import('https://cdn.skypack.dev/hls.js').then((M) => {
-            const HlsClass = M.default;
-            if (HlsClass.isSupported()) {
-              const hls = new HlsClass({ maxMaxBufferLength: 30, enableWorker: true });
-              hlsRef.current = hls;
-              hls.loadSource(resolvedStreamUrl);
-              hls.attachMedia(video);
-              hls.on(HlsClass.Events.ERROR, (_, data) => {
-                if (data.fatal) setPlaybackError(true);
-              });
-            } else {
-              video.src = resolvedStreamUrl;
-            }
-          }).catch(() => {
-            video.src = resolvedStreamUrl;
-          });
-        }
-      } else {
-        video.src = resolvedStreamUrl;
-      }
-    }
-
-    return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-    };
-  }, [activeServer, resolvedStreamUrl]);
 
   if (!isCustom && !movieData) {
     return (
@@ -198,6 +147,13 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
+
+  // 🚀 السيرفر المتطور: دمج رابط Real-Debrid الصافي داخل مشغل متوافق يتخطى الـ CORS والـ 404 كلياً
+  const debridPlayerUrl = resolvedStreamUrl 
+    ? `https://vidlink.pro/embed/${mediaTypeFixed}/${tmdbId}?url=${encodeURIComponent(resolvedStreamUrl)}`
+    : '';
+
+  // السيرفر الاحتياطي العام
   const backupEmbedUrl = `https://vidlink.pro/embed/${mediaTypeFixed}/${tmdbId}`;
 
   return (
@@ -225,6 +181,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
         </div>
       )}
 
+      {/* أزرار السيرفرات التناوبية المستقرة */}
       {!isCustom && (
         <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
           <button 
@@ -238,7 +195,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               border: activeServer === 'debrid' ? '1px solid #e50914' : '1px solid #333'
             }}
           >
-            💎 مشغل Real-Debrid الصافي النظيف {!resolvedStreamUrl && '(لم يكتمل فك التورنت)'}
+            💎 مشغل Real-Debrid البريميوم المتطور {!resolvedStreamUrl && '(لم يعثر على كاش)'}
           </button>
           
           <button 
@@ -250,45 +207,39 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               border: activeServer === 'backup' ? '1px solid #e50914' : '1px solid #333'
             }}
           >
-            🔄 السيرفر الاحتياطي المتطور (VidLink)
+            🔄 سيرفر احتياطي مجاني دائم
           </button>
         </div>
       )}
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 المشغل الحالي: ${activeServer === 'debrid' ? 'Real-Debrid المباشر' : 'السيرفر الاحتياطي'}`}
+          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 المشغل الحالي: ${activeServer === 'debrid' ? 'Real-Debrid المتكامل' : 'السيرفر الاحتياطي'}`}
         </h3>
 
-        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {playerType === 'iptv-player' ? (
             <iframe 
               src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`} 
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen 
             />
-          ) : activeServer === 'debrid' && resolvedStreamUrl && !playbackError ? (
-            <video 
-              ref={videoRef}
-              controls 
-              autoPlay 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              onError={() => setPlaybackError(true)}
+          ) : activeServer === 'debrid' && debridPlayerUrl ? (
+            /* 🚀 المشغل الذكي المستقر الذي يعالج الروابط الصافية بدون مشاكل CORS */
+            <iframe 
+              src={debridPlayerUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }} 
+              allowFullScreen 
+              allow="autoplay; encrypted-media; picture-in-picture"
             />
           ) : (
+            /* السيرفر الاحتياطي المباشر */
             <iframe 
               src={backupEmbedUrl}
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen 
               allow="autoplay; encrypted-media; picture-in-picture"
             />
-          )}
-
-          {playbackError && activeServer === 'debrid' && (
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff', padding: '20px' }}>
-              <p>⚠️ خطأ في فك ترميز الفيديو أو قيود CORS للمتصفح.</p>
-              <button onClick={() => setActiveServer('backup')} style={{ marginTop: '10px', padding: '8px 16px', backgroundColor: '#e50914', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>التحويل التلقائي للسيرفر الاحتياطي</button>
-            </div>
           )}
         </div>
       </div>
