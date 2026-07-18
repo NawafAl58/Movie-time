@@ -1,16 +1,17 @@
 import React from 'react';
 import { useRouter } from 'next/router';
 
-const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
+const API_KEY = 'fe4b6ec1a6183fddf6815px65506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 
-// 💎 توكن Real-Debrid الخاص بك
+// 💎 توكن Real-Debrid الشخصي الخاص بك
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
   const { id, type } = context.query;
   const mediaType = type === 'tv' ? 'tv' : 'movie';
   
+  // 1. تشغيل البث المباشر IPTV الخاص بك
   if (type === 'live' || id === 'iptv-custom-live') {
     return { 
       props: { 
@@ -22,6 +23,7 @@ export async function getServerSideProps(context) {
     };
   }
 
+  // 2. جلب بيانات الفيلم من TMDB
   let movieData = null;
   let imdbId = null;
   try {
@@ -56,7 +58,7 @@ export async function getServerSideProps(context) {
         }
       }
     } catch (err) {
-      console.error("Torrentio Error: ", err);
+      console.error("Torrentio Engine Error: ", err);
     }
   }
 
@@ -77,6 +79,11 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
+
+  // 🚀 تحويل رابط التحميل المباشر إلى رابط مشغل ويب متوافق يمنع التحميل التلقائي ويشغل الفيلم فوراً
+  const embedPlayerUrl = resolvedStreamUrl 
+    ? `https://vidlink.pro/embed/${movieData?.media_type_fixed Fixed || 'movie'}/${movieData?.id}?custom_link=${encodeURIComponent(resolvedStreamUrl)}`
+    : '';
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
@@ -105,10 +112,10 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 سيرفر Real-Debrid البريميوم الحصري`}
+          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 مشغل Real-Debrid الداخلي الصافي`}
         </h3>
 
-        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {playerType === 'iptv-player' ? (
             <iframe 
               src={resolvedStreamUrl} 
@@ -116,34 +123,20 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               allowFullScreen 
               allow="autoplay; encrypted-media"
             />
-          ) : resolvedStreamUrl ? (
-            // استخدام مشغل ويب ذكي داخل iframe يتخطى قيود المتصفح لقراءة روابط التورنت
+          ) : embedPlayerUrl ? (
+            // التضمين المباشر عبر مشغل البث لمنع التحميل وإجبار التشغيل داخل الموقع
             <iframe 
-              src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`}
+              src={embedPlayerUrl}
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen 
               allow="autoplay; encrypted-media"
             />
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px', padding: '0 20px', textAlign: 'center' }}>
-              ⚠️ لم يتم العثور على روابط متوافقة حالياً.
+              ⚠️ لم يتم العثور على روابط كاش جاهزة متوافقة داخل الموقع حالياً.
             </div>
           )}
         </div>
-
-        {/* 🚀 ميزة الأمان الإضافية: زر التشغيل الخارجي في حال تعليق المتصفح */}
-        {resolvedStreamUrl && playerType !== 'iptv-player' && (
-          <div style={{ marginTop: '15px', textAlign: 'center' }}>
-            <a 
-              href={resolvedStreamUrl} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              style={{ display: 'inline-block', backgroundColor: '#e50914', color: '#fff', padding: '12px 25px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px' }}
-            >
-              🚀 فتح الرابط البريميوم الصافي مباشرة في المتصفح أو مشغل خارجي (VLC)
-            </a>
-          </div>
-        )}
       </div>
     </div>
   );
