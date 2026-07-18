@@ -9,7 +9,6 @@ const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
   const { id, type } = context.query;
-  const mediaType = type === 'tv' ? 'tv' : 'movie';
   
   // 1. تشغيل البث المباشر IPTV الخاص بك
   if (type === 'live' || id === 'iptv-custom-live') {
@@ -23,20 +22,33 @@ export async function getServerSideProps(context) {
     };
   }
 
-  // 2. جلب بيانات الفيلم من TMDB
   let movieData = null;
   let imdbId = null;
-  try {
-    const res = await fetch(`${BASE_URL}/${mediaType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
-    movieData = await res.json();
-    if (movieData && movieData.success === false) {
-      movieData = null;
-    } else {
-      movieData.media_type_fixed = mediaType;
-      imdbId = movieData.external_ids?.imdb_id;
-    }
-  } catch (e) {}
+  let finalType = type || 'movie'; // إذا لم يرسل الرابط نوع، نفترض أنه فيلم كبداية
 
+  // 2. محاولة جلب البيانات (فحص ذكي للفيلم أو المسلسل لمنع الـ 404)
+  try {
+    let res = await fetch(`${BASE_URL}/${finalType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
+    movieData = await res.json();
+    
+    // إذا فشل كفيلم، نجرب نبحث عنه كمسلسل تلقائياً
+    if (!movieData || movieData.success === false) {
+      finalType = 'tv';
+      res = await fetch(`${BASE_URL}/${finalType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
+      movieData = await res.json();
+    }
+
+    if (movieData && movieData.success !== false) {
+      movieData.media_type_fixed = finalType;
+      imdbId = movieData.external_ids?.imdb_id;
+    } else {
+      movieData = null;
+    }
+  } catch (e) {
+    movieData = null;
+  }
+
+  // إذا لم يعثر عليه في الحالتين، نرجع صفحة فارغة بدل الـ 404 القاسية
   if (!movieData) {
     return { props: { movieData: null, resolvedStreamUrl: '', playerType: 'none', isCustom: false } };
   }
@@ -44,9 +56,10 @@ export async function getServerSideProps(context) {
   let resolvedStreamUrl = '';
   let playerType = 'none';
 
+  // 3. استخراج الرابط البريميوم الصافي عبر Torrentio
   if (imdbId) {
     try {
-      const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${mediaType}/${imdbId}.json`;
+      const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${imdbId}.json`;
       const tRes = await fetch(torrentioUrl);
       const tData = await tRes.json();
 
@@ -75,14 +88,14 @@ export async function getServerSideProps(context) {
 export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom }) {
   const router = useRouter();
 
-  if (!isCustom && !movieData) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>المحتوى غير موجود.</div>;
+  if (!isCustom && !movieData) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>المحتوى غير موجود أو الرابط غير صحيح.</div>;
 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
 
-  // 🚀 تحويل رابط التحميل المباشر إلى رابط مشغل ويب متوافق يمنع التحميل التلقائي ويشغل الفيلم فوراً داخل الموقع
+  // تضمين الرابط بشكل آمن داخل الموقع لمنع التحميل التلقائي وتشغيله فوراً كبث مباشر
   const embedPlayerUrl = resolvedStreamUrl 
-    ? `https://vidlink.pro/embed/${movieData?.media_type_fixed || 'movie'}/${movieData?.id}?custom_link=${encodeURIComponent(resolvedStreamUrl)}`
+    ? `https://vidlink.pro/embed/${movieData?.media_type_fixed}/${movieData?.id}?custom_link=${encodeURIComponent(resolvedStreamUrl)}`
     : '';
 
   return (
