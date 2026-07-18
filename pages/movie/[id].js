@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 
-// 💎 توكن Real-Debrid الشخصي الخاص بك
+// 💎 توكن Real-Debrid الشخصي
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
   const { id, type } = context.query;
-  const mediaType = type === 'tv' ? 'tv' : 'movie';
+  const finalType = type === 'tv' ? 'tv' : 'movie';
   
   if (type === 'live' || id === 'iptv-custom-live') {
     return { 
@@ -17,27 +17,29 @@ export async function getServerSideProps(context) {
         movieData: null, 
         resolvedStreamUrl: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8", 
         playerType: 'iptv-player',
-        isCustom: true 
+        isCustom: true,
+        tmdbId: id || '',
+        mediaTypeFixed: 'movie'
       } 
     };
   }
 
   let movieData = null;
   let imdbId = null;
-  let finalType = type || 'movie';
+  let detectedType = finalType;
 
   try {
-    let res = await fetch(`${BASE_URL}/${finalType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
+    let res = await fetch(`${BASE_URL}/${detectedType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
     movieData = await res.json();
     
     if (!movieData || movieData.success === false) {
-      finalType = 'tv';
-      res = await fetch(`${BASE_URL}/${finalType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
+      detectedType = 'tv';
+      res = await fetch(`${BASE_URL}/${detectedType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
       movieData = await res.json();
     }
 
     if (movieData && movieData.success !== false) {
-      movieData.media_type_fixed = finalType;
+      movieData.media_type_fixed = detectedType;
       imdbId = movieData.external_ids?.imdb_id;
     } else {
       movieData = null;
@@ -47,7 +49,7 @@ export async function getServerSideProps(context) {
   }
 
   if (!movieData) {
-    return { props: { movieData: null, resolvedStreamUrl: '', playerType: 'none', isCustom: false } };
+    return { props: { movieData: null, resolvedStreamUrl: '', playerType: 'none', isCustom: false, tmdbId: '', mediaTypeFixed: '' } };
   }
 
   let resolvedStreamUrl = '';
@@ -55,7 +57,7 @@ export async function getServerSideProps(context) {
 
   if (imdbId) {
     try {
-      const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${imdbId}.json`;
+      const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${detectedType}/${imdbId}.json`;
       const tRes = await fetch(torrentioUrl);
       const tData = await tRes.json();
 
@@ -76,18 +78,51 @@ export async function getServerSideProps(context) {
       movieData,
       resolvedStreamUrl,
       playerType,
-      isCustom: false
+      isCustom: false,
+      tmdbId: id,
+      mediaTypeFixed: detectedType
     }
   };
 }
 
-export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom }) {
+export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom, tmdbId, mediaTypeFixed }) {
   const router = useRouter();
+  const videoRef = useRef(null);
+  
+  // التحكم الافتراضي في السيرفر: التوجه لـ Real-Debrid إن وجد رابط، وإلا فالسيرفر الاحتياطي
+  const [activeServer, setActiveServer] = useState(resolvedStreamUrl ? 'debrid' : 'backup');
+
+  useEffect(() => {
+    // تشغيل مكتبة HLS.js برمجياً للتعامل مع صيغ البث المباشر والملفات المعقدة داخل المتصفح
+    if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
+      const video = videoRef.current;
+      
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = resolvedStreamUrl;
+      } else if (typeof window !== 'undefined') {
+        // استدعاء ديناميكي للمكتبة لضمان التوافق الكامل مع الحاويات المختلفة
+        import('hls.js').then((Hls) => {
+          if (Hls.default.isSupported()) {
+            const hls = new Hls.default();
+            hls.loadSource(resolvedStreamUrl);
+            hls.attachMedia(video);
+          } else {
+            video.src = resolvedStreamUrl;
+          }
+        }).catch(() => {
+          video.src = resolvedStreamUrl;
+        });
+      }
+    }
+  }, [activeServer, resolvedStreamUrl]);
 
   if (!isCustom && !movieData) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>المحتوى غير موجود.</div>;
 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
+
+  // رابط السيرفر الاحتياطي الدائم لضمان تشغيل أي محتوى لا يتوفر له كاش
+  const backupEmbedUrl = `https://vidsrc.to/embed/${mediaTypeFixed}/${tmdbId}`;
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
@@ -114,9 +149,40 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
         </div>
       )}
 
+      {/* أزرار التنقل الدائمة بين السيرفرين */}
+      {!isCustom && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+          <button 
+            onClick={() => setActiveServer('debrid')}
+            disabled={!resolvedStreamUrl}
+            style={{
+              flex: 1, padding: '12px', borderRadius: '8px', fontWeight: 'bold', 
+              cursor: resolvedStreamUrl ? 'pointer' : 'not-allowed',
+              backgroundColor: activeServer === 'debrid' ? '#e50914' : '#111',
+              color: resolvedStreamUrl ? '#fff' : '#555',
+              border: activeServer === 'debrid' ? '1px solid #e50914' : '1px solid #333'
+            }}
+          >
+            💎 مشغل Real-Debrid الأصيل {!resolvedStreamUrl && '(غير متوفر كاش)'}
+          </button>
+          
+          <button 
+            onClick={() => setActiveServer('backup')}
+            style={{
+              flex: 1, padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer',
+              backgroundColor: activeServer === 'backup' ? '#e50914' : '#111',
+              color: '#fff',
+              border: activeServer === 'backup' ? '1px solid #e50914' : '1px solid #333'
+            }}
+          >
+            🔄 السيرفر الاحتياطي الدائم (VidSrc)
+          </button>
+        </div>
+      )}
+
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 مشغل Real-Debrid الداخلي الأصيل`}
+          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 المشغل الحالي: ${activeServer === 'debrid' ? 'Real-Debrid الداخلي' : 'السيرفر الاحتياطي'}`}
         </h3>
 
         <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
@@ -126,19 +192,22 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen 
             />
-          ) : resolvedStreamUrl ? (
-            /* 🚀 مشغل HTML5 الأصيل لمنع التحميل ومطابقة الـ IP بنجاح */
+          ) : activeServer === 'debrid' && resolvedStreamUrl ? (
+            /* مشغل الفيديو الداخلي المدعوم بـ HLS لفك قيود التشفير والـ IP */
             <video 
-              src={resolvedStreamUrl} 
+              ref={videoRef}
               controls 
               autoPlay 
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              onError={(e) => console.log("Playback error, handling fallback...")}
             />
           ) : (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px', padding: '0 20px', textAlign: 'center' }}>
-              ⚠️ لم يتم العثور على روابط كاش جاهزة متوافقة داخل الموقع حالياً.
-            </div>
+            /* السيرفر الاحتياطي الذي يعمل بشكل مستقل تماماً داخل iframe كخطة بديلة آمنة */
+            <iframe 
+              src={backupEmbedUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }} 
+              allowFullScreen 
+              allow="autoplay; encrypted-media"
+            />
           )}
         </div>
       </div>
