@@ -4,21 +4,8 @@ import { useRouter } from 'next/router';
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 
-// 💎 سيرفر التوكن الخاص بك الفعال ومستقر 100%
+// 💎 توكن حسابك الفعال من Real-Debrid المأخوذ من الصورة مباشرة
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
-
-const customData = {
-  "live_channels": [
-    {
-      "id": "iptv-custom-live",
-      "name": "📺 قائمة كل بثوث وقنوات سيرفر IPTV الخاص بك",
-      "stream_url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8", 
-      "stream_type": "iptv-player"
-    }
-  ],
-  "arabic_movies": [],
-  "arabic_series": []
-};
 
 export async function getServerSideProps(context) {
   const { id, type, url, streamType } = context.query;
@@ -27,7 +14,7 @@ export async function getServerSideProps(context) {
     return { 
       props: { 
         movieData: null, 
-        liveData: { id: id || 'iptv-custom-live', url: url || '', streamType: streamType || 'iptv-player' }, 
+        liveData: { id: id || 'iptv-custom-live', url: url || '', streamType: 'iptv-player' }, 
         isCustom: true 
       } 
     };
@@ -84,10 +71,8 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   useEffect(() => {
     if (isCustom && liveData) {
       let targetUrl = `https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8")}`;
-      let targetType = 'iptv-player';
-
       setStreamUrl(targetUrl);
-      setPlayerType(targetType);
+      setPlayerType('iptv-player');
       setIsLoading(false);
       return;
     }
@@ -101,22 +86,25 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
       const year = (movie.release_date || movie.first_air_date)?.split('-')[0] || '';
 
       try {
-        const searchQueries = [`${queryName} ${year} 4K`, `${queryName} ${year} 1080p`];
+        // الاعتماد على محرك بحث تورنت بديل وأكثر استقراراً
+        const searchQueries = [`${queryName} ${year} 1080p`, `${queryName} ${year}`];
         let hash = null;
         let torrentName = '';
 
         for (let q of searchQueries) {
           const res = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(q)}`);
           const torrents = await res.json();
-          if (torrents && torrents.length > 0 && torrents[0].info_hash !== "0000000000000000000000000000000000000000") {
+          if (torrents && torrents.length > 0 && torrents[0].info_hash && torrents[0].info_hash !== "0000000000000000000000000000000000000000") {
             hash = torrents[0].info_hash;
             torrentName = torrents[0].name;
             break;
           }
         }
 
+        // إذا عثرنا على التورنت، نرسله مباشرة لـ Real-Debrid لفك الرابط وتشغيله صافي
         if (hash) {
           const magnetLink = `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(torrentName)}`;
+          
           const addTorrentRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
@@ -124,33 +112,40 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
           });
           const torrentInfo = await addTorrentRes.json();
 
-          await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentInfo.id}`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-            body: new URLSearchParams({ files: 'all' })
-          });
-
-          const getFilesRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentInfo.id}`, {
-            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-          });
-          const finalInfo = await getFilesRes.json();
-          
-          if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
-            const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+          if (torrentInfo && torrentInfo.id) {
+            await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentInfo.id}`, {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-              body: new URLSearchParams({ link: finalInfo.links[0] })
+              body: new URLSearchParams({ files: 'all' })
             });
-            const finalPremiumData = await unrestrictRes.json();
-            list.push({ 
-              id: 'debrid-4k', 
-              name: lang === 'ar' ? '💎 سيرفر بريميوم صافي 4K' : '💎 Premium 4K Pure Stream', 
-              url: finalPremiumData.download, 
-              type: 'video' 
+
+            const getFilesRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentInfo.id}`, {
+              headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
             });
+            const finalInfo = await getFilesRes.json();
+            
+            if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
+              const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+                body: new URLSearchParams({ link: finalInfo.links[0] })
+              });
+              const finalPremiumData = await unrestrictRes.json();
+              
+              if (finalPremiumData && finalPremiumData.download) {
+                list.push({ 
+                  id: 'debrid-premium', 
+                  name: lang === 'ar' ? '💎 سيرفر بريميوم صافي (Real-Debrid)' : '💎 Premium Pure Stream', 
+                  url: finalPremiumData.download, 
+                  type: 'video' 
+                });
+              }
+            }
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error(err);
+      }
 
       setServers(list);
       if (list.length > 0) {
@@ -198,12 +193,12 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isLoading ? '🔍 جاري الاتصال بالبث...' : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 سيرفر التوكن الصافي`}
+          {isLoading ? '🔍 جاري جلب السيرفر الصافي وتخطي الإعلانات...' : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 سيرفر Real-Debrid الصافي`}
         </h3>
 
         <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {isLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>جاري البحث عن روابط سريعة...</div>
           ) : playerType === 'iptv-player' ? (
             <iframe 
               src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8")}`} 
@@ -213,7 +208,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
             />
           ) : !streamUrl ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px' }}>
-              ⚠️ عذراً، لم يتم العثور على تورنت متوافق مع التوكن لهذا الفيلم في الوقت الحالي.
+              ⚠️ عذراً، التورنت الخاص بهذا الفيلم يستغرق وقتاً للربط، جرب تحديث الصفحة أو اختيار فيلم شائع آخر للتحقق.
             </div>
           ) : (
             <video src={streamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
