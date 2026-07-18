@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/router';
 
 const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
@@ -9,16 +9,15 @@ const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export async function getServerSideProps(context) {
   const { id, type } = context.query;
+  const mediaType = type === 'tv' ? 'tv' : 'movie';
   
   if (type === 'live' || id === 'iptv-custom-live') {
     return { 
       props: { 
         movieData: null, 
-        resolvedStreamUrl: `https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8")}`, 
+        resolvedStreamUrl: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8", 
         playerType: 'iptv-player',
-        isCustom: true,
-        tmdbId: id,
-        mediaTypeFixed: 'movie'
+        isCustom: true 
       } 
     };
   }
@@ -48,7 +47,7 @@ export async function getServerSideProps(context) {
   }
 
   if (!movieData) {
-    return { props: { movieData: null, resolvedStreamUrl: '', playerType: 'none', isCustom: false, tmdbId: '', mediaTypeFixed: '' } };
+    return { props: { movieData: null, resolvedStreamUrl: '', playerType: 'none', isCustom: false } };
   }
 
   let resolvedStreamUrl = '';
@@ -77,31 +76,18 @@ export async function getServerSideProps(context) {
       movieData,
       resolvedStreamUrl,
       playerType,
-      isCustom: false,
-      tmdbId: id,
-      mediaTypeFixed: finalType
+      isCustom: false
     }
   };
 }
 
-export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom, tmdbId, mediaTypeFixed }) {
+export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom }) {
   const router = useRouter();
-  
-  // 🎛️ إدارة حالة السيرفر المختار (الافتراضي هو Real-Debrid إذا توفر رابط، وإلا يحول للاحتياطي)
-  const [activeServer, setActiveServer] = useState(resolvedStreamUrl ? 'debrid' : 'backup');
 
   if (!isCustom && !movieData) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>المحتوى غير موجود.</div>;
 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
-
-  // رابط مشغل Real-Debrid الداخلي
-  const debridEmbedUrl = resolvedStreamUrl 
-    ? `https://vidlink.pro/embed/${mediaTypeFixed}/${tmdbId}?custom_link=${encodeURIComponent(resolvedStreamUrl)}`
-    : '';
-
-  // رابط السيرفر الاحتياطي المجاني (يدعم الأفلام والمسلسلات ويشغل كل شيء)
-  const backupEmbedUrl = `https://vidsrc.to/embed/${mediaTypeFixed}/${tmdbId}`;
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
@@ -128,64 +114,31 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
         </div>
       )}
 
-      {/* 🚀 أزرار التحكم واختيار السيرفرات */}
-      {!isCustom && (
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-          <button 
-            onClick={() => setActiveServer('debrid')}
-            disabled={!resolvedStreamUrl}
-            style={{
-              flex: 1, padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: resolvedStreamUrl ? 'pointer' : 'not-allowed',
-              backgroundColor: activeServer === 'debrid' ? '#e50914' : '#111',
-              color: resolvedStreamUrl ? '#fff' : '#555',
-              border: activeServer === 'debrid' ? '1px solid #e50914' : '1px solid #333'
-            }}
-          >
-            💎 سيرفر Real-Debrid البريميوم {!resolvedStreamUrl && '(غير متوفر)'}
-          </button>
-          
-          <button 
-            onClick={() => setActiveServer('backup')}
-            style={{
-              flex: 1, padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer',
-              backgroundColor: activeServer === 'backup' ? '#e50914' : '#111',
-              color: '#fff',
-              border: activeServer === 'backup' ? '1px solid #e50914' : '1px solid #333'
-            }}
-          >
-            🔄 سيرفر احتياطي مجاني (يشغل كل الأفلام)
-          </button>
-        </div>
-      )}
-
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <h3 style={{ marginBottom: '15px', fontSize: '18px', color: '#fff' }}>
-          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 المشغل النشط حالياً: ${activeServer === 'debrid' ? 'Real-Debrid' : 'السيرفر الاحتياطي'}`}
+          {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 مشغل Real-Debrid الداخلي الأصيل`}
         </h3>
 
         <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {playerType === 'iptv-player' ? (
             <iframe 
-              src={resolvedStreamUrl} 
+              src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`} 
               style={{ width: '100%', height: '100%', border: 'none' }} 
               allowFullScreen 
-              allow="autoplay; encrypted-media"
             />
-          ) : activeServer === 'debrid' && debridEmbedUrl ? (
-            <iframe 
-              src={debridEmbedUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }} 
-              allowFullScreen 
-              allow="autoplay; encrypted-media"
+          ) : resolvedStreamUrl ? (
+            /* 🚀 مشغل HTML5 الأصيل لمنع التحميل ومطابقة الـ IP بنجاح */
+            <video 
+              src={resolvedStreamUrl} 
+              controls 
+              autoPlay 
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              onError={(e) => console.log("Playback error, handling fallback...")}
             />
           ) : (
-            // تشغيل السيرفر الاحتياطي المجاني لضمان عدم انقطاع أي فيلم
-            <iframe 
-              src={backupEmbedUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }} 
-              allowFullScreen 
-              allow="autoplay; encrypted-media"
-            />
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px', padding: '0 20px', textAlign: 'center' }}>
+              ⚠️ لم يتم العثور على روابط كاش جاهزة متوافقة داخل الموقع حالياً.
+            </div>
           )}
         </div>
       </div>
