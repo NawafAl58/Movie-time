@@ -12,7 +12,6 @@ export async function getServerSideProps(context) {
   const { id, type } = context.query;
   let finalType = type === 'tv' ? 'tv' : 'movie';
   
-  // 1. معالجة قنوات البث الحي المباشر
   if (type === 'live' || id === 'iptv-custom-live') {
     return { 
       props: { 
@@ -29,7 +28,6 @@ export async function getServerSideProps(context) {
   let movieData = null;
   let imdbId = null;
 
-  // 2. جلب بيانات TMDB مع الفحص الثنائي (Movie/TV) لمنع الـ 404
   try {
     let res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
     if (res.ok) movieData = await res.json();
@@ -47,30 +45,24 @@ export async function getServerSideProps(context) {
       movieData = null;
     }
   } catch (e) {
-    console.error("TMDB Fetch Error:", e);
     movieData = null;
   }
 
   let resolvedStreamUrl = '';
   let playerType = 'none';
 
-  // 3. خطة فك التورنت واستخراج الرابط النهائي الصافي عبر Real-Debrid API
   if (movieData && imdbId) {
     try {
-      // أ) البحث عن التورنت عبر Torrentio
       const torrentioUrl = `https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`;
       const tRes = await fetch(torrentioUrl);
       
       if (tRes.ok) {
         const tData = await tRes.json();
-        
         if (tData && tData.streams && tData.streams.length > 0) {
-          // جلب أول سورس يحتوي على infoHash أو رابط مغناطيسي
           const streamTarget = tData.streams.find(s => s.infoHash || s.url);
           
           if (streamTarget) {
             if (streamTarget.infoHash) {
-              // ب) إضافة التورنت إلى حساب Real-Debrid الخاص بك عبر الـ InfoHash
               const addRes = await fetch(`${RD_API_BASE}/torrents/addTorrent`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -81,50 +73,41 @@ export async function getServerSideProps(context) {
                 const addData = await addRes.json();
                 const torrentId = addData.id;
 
-                // ج) جلب تفاصيل التورنت لتحديد ملف الفيديو الأكبر حجماً (الفيلم الصافي)
                 const infoRes = await fetch(`${RD_API_BASE}/torrents/info/${torrentId}`, {
                   headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
                 });
 
                 if (infoRes.ok) {
                   const infoData = await infoRes.json();
-                  // اختيار الملفات المتاحة وتحديد الأكبر حجماً لتخطي ملفات الـ TXT والترجمات
                   if (infoData.files && infoData.files.length > 0) {
-                    const videoFiles = infoData.files.filter(f => f.selected === 1);
-                    if (videoFiles.length > 0) {
-                      // د) اختيار جميع الملفات المحددة لبدء التوليد
-                      await fetch(`${RD_API_BASE}/torrents/selectFiles/${torrentId}`, {
+                    await fetch(`${RD_API_BASE}/torrents/selectFiles/${torrentId}`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+                      body: `files=all`
+                    });
+
+                    const finalInfoRes = await fetch(`${RD_API_BASE}/torrents/info/${torrentId}`, {
+                      headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
+                    });
+                    const finalInfoData = await finalInfoRes.json();
+
+                    if (finalInfoData.links && finalInfoData.links.length > 0) {
+                      const unrestrictRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `files=all`
+                        body: `link=${encodeURIComponent(finalInfoData.links[0])}`
                       });
 
-                      // هـ) إعادة جلب الرابط بعد التحديد للحصول على روابط الـ Links غير المقيدة
-                      const finalInfoRes = await fetch(`${RD_API_BASE}/torrents/info/${torrentId}`, {
-                        headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-                      });
-                      const finalInfoData = await finalInfoRes.json();
-
-                      if (finalInfoData.links && finalInfoData.links.length > 0) {
-                        // و) الخطوة الحاسمة: تحويل الرابط الداخلي إلى Direct Download Link
-                        const unrestrictRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
-                          method: 'POST',
-                          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-                          body: `link=${encodeURIComponent(finalInfoData.links[0])}`
-                        });
-
-                        if (unrestrictRes.ok) {
-                          const unrestrictData = await unrestrictRes.json();
-                          resolvedStreamUrl = unrestrictData.download; // 🚀 هنا حصلنا على رابط الـ MP4/MKV المباشر النظيف!
-                          playerType = 'video';
-                        }
+                      if (unrestrictRes.ok) {
+                        const unrestrictData = await unrestrictRes.json();
+                        resolvedStreamUrl = unrestrictData.download;
+                        playerType = 'video';
                       }
                     }
                   }
                 }
               }
             } else if (streamTarget.url && streamTarget.url.startsWith('http')) {
-              // إذا كان الرابط المرجوع مباشر بالفعل من Torrentio (حالة نادرة)
               resolvedStreamUrl = streamTarget.url;
               playerType = 'video';
             }
@@ -132,7 +115,7 @@ export async function getServerSideProps(context) {
         }
       }
     } catch (err) {
-      console.error("Real-Debrid Core Resolution Pipeline Failed: ", err);
+      console.error("Real-Debrid Resolution Error: ", err);
     }
   }
 
@@ -151,42 +134,37 @@ export async function getServerSideProps(context) {
 export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, isCustom, tmdbId, mediaTypeFixed }) {
   const router = useRouter();
   const videoRef = useRef(null);
-  const hlsInstanceRef = useRef(null);
+  const hlsRef = useRef(null);
   
   const [activeServer, setActiveServer] = useState(resolvedStreamUrl ? 'debrid' : 'backup');
   const [playbackError, setPlaybackError] = useState(false);
 
   useEffect(() => {
-    // تنظيف كائن HLS السابق لمنع تعليق الذاكرة والمشغل (Memory Leaks)
-    if (hlsInstanceRef.current) {
-      hlsInstanceRef.current.destroy();
-      hlsInstanceRef.current = null;
+    // تدمير الكائن السابق تنظيفاً للذاكرة ومنع التداخل
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
     }
     setPlaybackError(false);
 
     if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
       const video = videoRef.current;
-      
-      // التشغيل الذكي: نستخدم HLS.js فقط إذا كان الامتداد ينتهي بـ m3u8
       const isHlsUrl = resolvedStreamUrl.includes('.m3u8');
 
       if (isHlsUrl) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = resolvedStreamUrl;
         } else {
-          import('hls.js').then((Hls) => {
-            if (Hls.default.isSupported()) {
-              const hls = new Hls.default({
-                maxMaxBufferLength: 30,
-                enableWorker: true
-              });
-              hlsInstanceRef.current = hls;
+          // استدعاء آمن للمكتبة من CDN خارجي لتجنب أخطاء البناء في فيرسيل
+          import('https://cdn.skypack.dev/hls.js').then((M) => {
+            const HlsClass = M.default;
+            if (HlsClass.isSupported()) {
+              const hls = new HlsClass({ maxMaxBufferLength: 30, enableWorker: true });
+              hlsRef.current = hls;
               hls.loadSource(resolvedStreamUrl);
               hls.attachMedia(video);
-              hls.on(Hls.default.Events.ERROR, function (event, data) {
-                if (data.fatal) {
-                  setPlaybackError(true);
-                }
+              hls.on(HlsClass.Events.ERROR, (_, data) => {
+                if (data.fatal) setPlaybackError(true);
               });
             } else {
               video.src = resolvedStreamUrl;
@@ -196,16 +174,14 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
           });
         }
       } else {
-        // إذا كان ملف فيديو مباشر (MP4 / MKV / AVI) يتم تمريره مباشرة لعنصر الفيديو
         video.src = resolvedStreamUrl;
       }
     }
 
-    // دالة التنظيف عند مغادرة الصفحة أو تبديل السيرفر
     return () => {
-      if (hlsInstanceRef.current) {
-        hlsInstanceRef.current.destroy();
-        hlsInstanceRef.current = null;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
     };
   }, [activeServer, resolvedStreamUrl]);
@@ -213,8 +189,8 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   if (!isCustom && !movieData) {
     return (
       <div style={{ color: 'white', padding: '50px', textAlign: 'center', direction: 'rtl' }}>
-        <h2>⚠️ خطأ في جلب البيانات</h2>
-        <p>المحتوى غير موجود في TMDB حالياً أو الرابط غير صحيح.</p>
+        <h2>⚠️ خطأ في البيانات</h2>
+        <p>المحتوى غير موجود حالياً.</p>
         <button onClick={() => router.push('/')} style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#e50914', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>العودة للرئيسية</button>
       </div>
     );
@@ -222,8 +198,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
-
-  // استخدام سورس احتياطي أكثر استقراراً ومرونة مع حمايات الحظر (VidLink المتطور لكسر حظر الـ iframe)
   const backupEmbedUrl = `https://vidlink.pro/embed/${mediaTypeFixed}/${tmdbId}`;
 
   return (
@@ -251,7 +225,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
         </div>
       )}
 
-      {/* أزرار السيرفرات الذكية */}
       {!isCustom && (
         <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
           <button 
@@ -295,7 +268,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               allowFullScreen 
             />
           ) : activeServer === 'debrid' && resolvedStreamUrl && !playbackError ? (
-            /* مشغل الفيديو الأصيل المدعوم بمعالجة الامتدادات وفك التورنت */
             <video 
               ref={videoRef}
               controls 
@@ -304,7 +276,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               onError={() => setPlaybackError(true)}
             />
           ) : (
-            /* السيرفر الاحتياطي مع كسر حمايات حجب الـ iframe */
             <iframe 
               src={backupEmbedUrl}
               style={{ width: '100%', height: '100%', border: 'none' }} 
@@ -316,7 +287,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
           {playbackError && activeServer === 'debrid' && (
             <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff', padding: '20px' }}>
               <p>⚠️ خطأ في فك ترميز الفيديو أو قيود CORS للمتصفح.</p>
-              <button onClick={() => setActiveServer('backup')} style={{ marginTop: '10px', padding: '8px 16px', backgroundColor: '#e50914', color: '#white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>التحويل التلقائي للسيرفر الاحتياطي</button>
+              <button onClick={() => setActiveServer('backup')} style={{ marginTop: '10px', padding: '8px 16px', backgroundColor: '#e50914', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>التحويل التلقائي للسيرفر الاحتياطي</button>
             </div>
           )}
         </div>
