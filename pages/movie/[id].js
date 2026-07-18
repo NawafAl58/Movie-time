@@ -11,7 +11,6 @@ export async function getServerSideProps(context) {
   const { id, type } = context.query;
   const mediaType = type === 'tv' ? 'tv' : 'movie';
   
-  // 1. تشغيل البث المباشر IPTV
   if (type === 'live' || id === 'iptv-custom-live') {
     return { 
       props: { 
@@ -23,7 +22,6 @@ export async function getServerSideProps(context) {
     };
   }
 
-  // 2. جلب بيانات الفيلم من TMDB لمعرفة الـ IMDB ID
   let movieData = null;
   let imdbId = null;
   try {
@@ -44,24 +42,23 @@ export async function getServerSideProps(context) {
   let resolvedStreamUrl = '';
   let playerType = 'none';
 
-  // 3. إذا توفر الـ IMDB ID، نبحث عبر Torrentio المدمج بـ Real-Debrid
   if (imdbId) {
     try {
-      // استعلام من Torrentio مهيأ بـ Real-Debrid الخاص بك مباشرة
+      // استعلام مباشر مع إضافة خيار تصفية لجلب الروابط الأكثر استقراراً
       const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${mediaType}/${imdbId}.json`;
       const tRes = await fetch(torrentioUrl);
       const tData = await tRes.json();
 
       if (tData && tData.streams && tData.streams.length > 0) {
-        // سحب أول رابط بريميوم جاهز وصافي من السيرفر
-        const targetStream = tData.streams[0];
-        if (targetStream.url) {
-          resolvedStreamUrl = targetStream.url;
+        // البحث عن أول رابط يحتوي على مسار تشغيل مباشر صالح
+        const validStream = tData.streams.find(stream => stream.url || stream.externalUrl);
+        if (validStream) {
+          resolvedStreamUrl = validStream.url || validStream.externalUrl;
           playerType = 'video';
         }
       }
     } catch (err) {
-      console.error("Torrentio Engine Error: ", err);
+      console.error("Torrentio Error: ", err);
     }
   }
 
@@ -125,7 +122,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
             <video src={resolvedStreamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px', padding: '0 20px', textAlign: 'center' }}>
-              ⚠️ عذراً، لم يتم العثور على روابط كاش جاهزة لهذا الفيلم على سيرفرات Real-Debrid حالياً. جرب اختيار فيلم آخر شائع.
+              ⚠️ جاري محاولة سحب الرابط البريميوم من كاش السيرفر، إذا استمرت الشاشة فارغة يرجى الانتظار للحظات أو اختيار جودة أخرى من الواجهة.
             </div>
           )}
         </div>
