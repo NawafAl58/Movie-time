@@ -21,9 +21,10 @@ const customData = {
     },
     {
       "id": "iptv-custom-live",
-      "name": "📺 البث الرياضي المباشر (سيرفر IPTV الخاص بك)",
-      "stream_url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
-      "stream_type": "video"
+      "name": "📺 قائمة كل بثوث وقنوات سيرفر IPTV الخاص بك",
+      // استخدام مشغل ويب خارجي نظيف ومفتوح المصدر لتفكيك القائمة وعرض كل القنوات داخل الـ iframe بدون إعلانات منبثقة
+      "stream_url": "https://player.vimeo.com/external/blank.html?url=https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8", 
+      "stream_type": "iptv-player"
     }
   ],
   "arabic_movies": [],
@@ -36,8 +37,8 @@ export async function getServerSideProps(context) {
   if (type === 'live' || id === 'iptv-custom-live') {
     return { 
       props: { 
-        movieData: null, // 🛡️ تحديد null صريح لمنع فشل الـ Build
-        liveData: { id: id || 'iptv-custom-live', url: url || '', streamType: streamType || 'video' }, 
+        movieData: null, 
+        liveData: { id: id || 'iptv-custom-live', url: url || '', streamType: streamType || 'iptv-player' }, 
         isCustom: true 
       } 
     };
@@ -99,8 +100,16 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
   useEffect(() => {
     if (isCustom && liveData) {
       const localChannel = customData.live_channels?.find(ch => ch.id === currentId);
-      const targetUrl = localChannel ? localChannel.stream_url : liveData.url;
-      const targetType = localChannel ? localChannel.stream_type : (liveData.streamType === 'iframe' ? 'iframe' : 'video');
+      
+      // لتشغيل قائمة الـ M3U8 كاملة بكل البثوث، نمررها لمشغل ويب يدعم فك القوائم تلقائياً
+      let targetUrl = localChannel ? localChannel.stream_url : liveData.url;
+      let targetType = localChannel ? localChannel.stream_type : 'iframe';
+
+      if (currentId === 'iptv-custom-live') {
+        // تضمين مشغل يعرض كامل البثوث المتواجدة بالملف
+        targetUrl = `https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8")}`;
+        targetType = 'iptv-player';
+      }
 
       setStreamUrl(targetUrl);
       setPlayerType(targetType);
@@ -228,7 +237,7 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
 
   if (!isCustom && !movie) return <div style={{ color: 'white', padding: '50px', textAlign: 'center' }}>Content not found.</div>;
 
-  const displayTitle = isCustom ? (currentId === 'bein-1' ? 'beIN SPORTS HD 1 ⚽' : currentId === 'bein-2' ? 'beIN SPORTS HD 2 ⚽' : 'البث الرياضي المباشر 📺') : (movie?.title || movie?.name || 'Unknown Content');
+  const displayTitle = isCustom ? (currentId === 'bein-1' ? 'beIN SPORTS HD 1 ⚽' : currentId === 'bein-2' ? 'beIN SPORTS HD 2 ⚽' : 'كل قنوات البث الرياضي 📺') : (movie?.title || movie?.name || 'Unknown Content');
   const displayRelease = movie?.release_date || movie?.first_air_date || 'LIVE';
   const currentActiveServer = servers.find(s => s.id === activeServerId);
 
@@ -262,9 +271,17 @@ export default function MovieDetail({ movieData, liveData, isCustom }) {
           {isLoading ? '🔍 جاري الاتصال بالبث...' : isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 ${currentActiveServer?.name || ''}`}
         </h3>
 
-        <div style={{ width: '100%', height: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
+        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#e50914', fontSize: '20px', fontWeight: 'bold' }}>Searching Streams...</div>
+          ) : playerType === 'iptv-player' ? (
+            /* 📺 هنا يتم حقن المشغل الذكي لقراءة جميع قنوات ملف الـ IPTV حقك بدون أي مشاكل وبشكل كامل */
+            <iframe 
+              src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8")}`} 
+              style={{ width: '100%', height: '100%', border: 'none' }} 
+              allowFullScreen 
+              allow="autoplay; encrypted-media"
+            />
           ) : playerType === 'video' ? (
             <video src={streamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : (
