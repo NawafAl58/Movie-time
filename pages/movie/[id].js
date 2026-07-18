@@ -1,7 +1,7 @@
 import React from 'react';
 import { useRouter } from 'next/router';
 
-const API_KEY = 'fe4b6ec1a6183fddf6815px65506956216'; 
+const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 
 // 💎 توكن Real-Debrid الشخصي الخاص بك
@@ -80,9 +80,9 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
   const displayTitle = isCustom ? 'كل قنوات البث الرياضي 📺' : (movieData?.title || movieData?.name || 'Unknown Content');
   const displayRelease = movieData?.release_date || movieData?.first_air_date || 'LIVE';
 
-  // 🚀 تحويل رابط التحميل المباشر إلى رابط مشغل ويب متوافق يمنع التحميل التلقائي ويشغل الفيلم فوراً
+  // 🚀 تم تصحيح الكلمة الزائدة هنا ليعمل البناء بنجاح
   const embedPlayerUrl = resolvedStreamUrl 
-    ? `https://vidlink.pro/embed/${movieData?.media_type_fixed Fixed || 'movie'}/${movieData?.id}?custom_link=${encodeURIComponent(resolvedStreamUrl)}`
+    ? `https://vidlink.pro/embed/${movieData?.media_type_fixed || 'movie'}/${movieData?.id}?custom_link=${encodeURIComponent(resolvedStreamUrl)}`
     : '';
 
   return (
@@ -124,7 +124,6 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               allow="autoplay; encrypted-media"
             />
           ) : embedPlayerUrl ? (
-            // التضمين المباشر عبر مشغل البث لمنع التحميل وإجبار التشغيل داخل الموقع
             <iframe 
               src={embedPlayerUrl}
               style={{ width: '100%', height: '100%', border: 'none' }} 
