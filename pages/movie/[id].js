@@ -44,16 +44,14 @@ export async function getServerSideProps(context) {
 
   if (imdbId) {
     try {
-      // استعلام مباشر مع إضافة خيار تصفية لجلب الروابط الأكثر استقراراً
       const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${mediaType}/${imdbId}.json`;
       const tRes = await fetch(torrentioUrl);
       const tData = await tRes.json();
 
       if (tData && tData.streams && tData.streams.length > 0) {
-        // البحث عن أول رابط يحتوي على مسار تشغيل مباشر صالح
-        const validStream = tData.streams.find(stream => stream.url || stream.externalUrl);
+        const validStream = tData.streams.find(stream => stream.url);
         if (validStream) {
-          resolvedStreamUrl = validStream.url || validStream.externalUrl;
+          resolvedStreamUrl = validStream.url;
           playerType = 'video';
         }
       }
@@ -110,7 +108,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
           {isCustom ? `🔴 البث الحي المباشر: ${displayTitle}` : `🍿 سيرفر Real-Debrid البريميوم الحصري`}
         </h3>
 
-        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
           {playerType === 'iptv-player' ? (
             <iframe 
               src={resolvedStreamUrl} 
@@ -118,14 +116,34 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
               allowFullScreen 
               allow="autoplay; encrypted-media"
             />
-          ) : playerType === 'video' && resolvedStreamUrl ? (
-            <video src={resolvedStreamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          ) : resolvedStreamUrl ? (
+            // استخدام مشغل ويب ذكي داخل iframe يتخطى قيود المتصفح لقراءة روابط التورنت
+            <iframe 
+              src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`}
+              style={{ width: '100%', height: '100%', border: 'none' }} 
+              allowFullScreen 
+              allow="autoplay; encrypted-media"
+            />
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px', padding: '0 20px', textAlign: 'center' }}>
-              ⚠️ جاري محاولة سحب الرابط البريميوم من كاش السيرفر، إذا استمرت الشاشة فارغة يرجى الانتظار للحظات أو اختيار جودة أخرى من الواجهة.
+              ⚠️ لم يتم العثور على روابط متوافقة حالياً.
             </div>
           )}
         </div>
+
+        {/* 🚀 ميزة الأمان الإضافية: زر التشغيل الخارجي في حال تعليق المتصفح */}
+        {resolvedStreamUrl && playerType !== 'iptv-player' && (
+          <div style={{ marginTop: '15px', textAlign: 'center' }}>
+            <a 
+              href={resolvedStreamUrl} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              style={{ display: 'inline-block', backgroundColor: '#e50914', color: '#fff', padding: '12px 25px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px' }}
+            >
+              🚀 فتح الرابط البريميوم الصافي مباشرة في المتصفح أو مشغل خارجي (VLC)
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
