@@ -7,9 +7,6 @@ const BASE_URL = 'https://api.themoviedb.org/3';
 // 💎 توكن Real-Debrid الخاص بك
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
-// دالة مساعدة لمنح السيرفر وقتاً لمعالجة البيانات
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export async function getServerSideProps(context) {
   const { id, type } = context.query;
   const mediaType = type === 'tv' ? 'tv' : 'movie';
@@ -26,95 +23,46 @@ export async function getServerSideProps(context) {
     };
   }
 
-  // 2. جلب بيانات الفيلم من TMDB
+  // 2. جلب بيانات الفيلم من TMDB لمعرفة الـ IMDB ID
   let movieData = null;
+  let imdbId = null;
   try {
-    const res = await fetch(`${BASE_URL}/${mediaType}/${id}?api_key=${API_KEY}&language=en-US`);
+    const res = await fetch(`${BASE_URL}/${mediaType}/${id}?api_key=${API_KEY}&append_to_response=external_ids&language=en-US`);
     movieData = await res.json();
-    if (movieData && movieData.success === false) movieData = null;
-    else movieData.media_type_fixed = mediaType;
+    if (movieData && movieData.success === false) {
+      movieData = null;
+    } else {
+      movieData.media_type_fixed = mediaType;
+      imdbId = movieData.external_ids?.imdb_id;
+    }
   } catch (e) {}
 
   if (!movieData) {
     return { props: { movieData: null, resolvedStreamUrl: '', playerType: 'none', isCustom: false } };
   }
 
-  // 3. البحث عن التورنت وفك التشفير عبر Backend السيرفر
   let resolvedStreamUrl = '';
   let playerType = 'none';
-  const queryName = movieData.original_title || movieData.original_name || movieData.title || movieData.name;
-  const year = (movieData.release_date || movieData.first_air_date)?.split('-')[0] || '';
 
-  try {
-    const searchQueries = [`${queryName} ${year} 1080p`, `${queryName} ${year}`];
-    let hash = null;
-    let torrentName = '';
+  // 3. إذا توفر الـ IMDB ID، نبحث عبر Torrentio المدمج بـ Real-Debrid
+  if (imdbId) {
+    try {
+      // استعلام من Torrentio مهيأ بـ Real-Debrid الخاص بك مباشرة
+      const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${mediaType}/${imdbId}.json`;
+      const tRes = await fetch(torrentioUrl);
+      const tData = await tRes.json();
 
-    for (let q of searchQueries) {
-      const res = await fetch(`https://api.apibay.org/q.php?q=${encodeURIComponent(q)}`);
-      const torrents = await res.json();
-      if (torrents && torrents.length > 0 && torrents[0].info_hash && torrents[0].info_hash !== "0000000000000000000000000000000000000000") {
-        hash = torrents[0].info_hash;
-        torrentName = torrents[0].name;
-        break;
-      }
-    }
-
-    if (hash) {
-      const magnetLink = `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(torrentName)}`;
-      
-      // أ- إضافة الماجنت إلى Real-Debrid
-      const addRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-        body: new URLSearchParams({ magnet: magnetLink })
-      });
-      const torrentInfo = await addRes.json();
-
-      if (torrentInfo && torrentInfo.id) {
-        const torrentId = torrentInfo.id;
-
-        // ب- انتظار قصير للتأكد من أن السيرفر استوعب الماجنت وتعرف على الملفات
-        await delay(1500);
-
-        // جـ- اختيار الملفات وتحديدها كـ "all"
-        await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-          body: new URLSearchParams({ files: 'all' })
-        });
-
-        // د- حلقة تحقق ذكية (حتى 3 محاولات) لانتظار توليد الروابط الجاهزة
-        let finalInfo = null;
-        for (let i = 0; i < 3; i++) {
-          await delay(1000);
-          const infoRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`, {
-            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-          });
-          finalInfo = await infoRes.json();
-          if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
-            break;
-          }
-        }
-        
-        // هـ- فك تشفير الرابط الأول الجاهز وتحويله لرابط تحميل مباشر وصافي
-        if (finalInfo && finalInfo.links && finalInfo.links.length > 0) {
-          const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-            body: new URLSearchParams({ link: finalInfo.links[0] })
-          });
-          const premiumData = await unrestrictRes.json();
-          
-          if (premiumData && premiumData.download) {
-            resolvedStreamUrl = premiumData.download;
-            playerType = 'video';
-          }
+      if (tData && tData.streams && tData.streams.length > 0) {
+        // سحب أول رابط بريميوم جاهز وصافي من السيرفر
+        const targetStream = tData.streams[0];
+        if (targetStream.url) {
+          resolvedStreamUrl = targetStream.url;
+          playerType = 'video';
         }
       }
+    } catch (err) {
+      console.error("Torrentio Engine Error: ", err);
     }
-  } catch (err) {
-    console.error("Server-side Error: ", err);
   }
 
   return {
@@ -177,7 +125,7 @@ export default function MovieDetail({ movieData, resolvedStreamUrl, playerType, 
             <video src={resolvedStreamUrl} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#aaa', fontSize: '18px', padding: '0 20px', textAlign: 'center' }}>
-              ⚠️ عذراً، لم نتمكن من جلب ملف تورنت كاش متوافق مع حسابك لهذا الفيلم بشكل فوري، يرجى تجربة فيلم آخر أكثر شيوعاً للتحقق من عمل السيرفر.
+              ⚠️ عذراً، لم يتم العثور على روابط كاش جاهزة لهذا الفيلم على سيرفرات Real-Debrid حالياً. جرب اختيار فيلم آخر شائع.
             </div>
           )}
         </div>
