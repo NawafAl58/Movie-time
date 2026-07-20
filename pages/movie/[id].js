@@ -1,5 +1,5 @@
 // pages/movie/[id].js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 
@@ -15,10 +15,11 @@ export default function MovieDetail() {
   const [movieData, setMovieData] = useState(null);
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
   const [playerType, setPlayerType] = useState('none');
-  const [rdStatus, setRdStatus] = useState('loading'); // 'loading' | 'ready' | 'failed'
-  const [statusMessage, setStatusMessage] = useState('جاري فحص كاش Real-Debrid...');
+  const [rdStatus, setRdStatus] = useState('loading');
   const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
+
+  const videoRef = useRef(null);
 
   useEffect(() => {
     if (!id) return;
@@ -62,7 +63,7 @@ export default function MovieDetail() {
 
       if (mData && imdbId) {
         try {
-          // 1. الاستعلام المباشر من Torrentio المعالج بـ Real-Debrid API المباشر
+          // جلب المصادر من Torrentio مع توكين Real-Debrid
           const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${imdbId}.json`;
           const tRes = await fetch(torrentioUrl);
           
@@ -70,11 +71,13 @@ export default function MovieDetail() {
             const tData = await tRes.json();
             
             if (tData && tData.streams && tData.streams.length > 0) {
-              // البحث عن أول رابط سريع ومباشر من Real-Debrid
-              const directStream = tData.streams.find(s => s.url && (s.url.includes('real-debrid') || s.url.startsWith('http')));
-              
-              if (directStream && directStream.url) {
-                setResolvedStreamUrl(directStream.url);
+              // إعطاء الأولوية لصيغ MP4 و x264 لتضمن عملها على المتصفحات
+              const compatibleStream = tData.streams.find(s => 
+                s.url && (s.url.includes('.mp4') || s.name?.includes('x264') || s.title?.includes('x264') || s.title?.includes('MP4'))
+              ) || tData.streams.find(s => s.url && s.url.startsWith('http'));
+
+              if (compatibleStream && compatibleStream.url) {
+                setResolvedStreamUrl(compatibleStream.url);
                 setPlayerType('video');
                 setRdStatus('ready');
                 setActiveServer('debrid');
@@ -84,80 +87,12 @@ export default function MovieDetail() {
             }
           }
 
-          // 2. المحاولة اليدوية في حال لم يستجب Torrentio المباشر
-          const fallbackTorrentio = `https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`;
-          const fbRes = await fetch(fallbackTorrentio);
-          
-          if (fbRes.ok) {
-            const fbData = await fbRes.json();
-            if (fbData && fbData.streams && fbData.streams.length > 0) {
-              const hashStream = fbData.streams.find(s => s.infoHash);
-              
-              if (hashStream && hashStream.infoHash) {
-                const formData = new URLSearchParams();
-                formData.append('magnet', `magnet:?xt=urn:btih:${hashStream.infoHash}`);
-
-                const addRes = await fetch(`${RD_API_BASE}/torrents/addMagnet`, {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-                  body: formData
-                });
-
-                if (addRes.ok) {
-                  const addData = await addRes.json();
-                  const torrentId = addData.id;
-
-                  // اختيار الملفات
-                  const selectData = new URLSearchParams();
-                  selectData.append('files', 'all');
-
-                  await fetch(`${RD_API_BASE}/torrents/selectFiles/${torrentId}`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-                    body: selectData
-                  });
-
-                  // جلب الروابط
-                  const infoRes = await fetch(`${RD_API_BASE}/torrents/info/${torrentId}`, {
-                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-                  });
-
-                  if (infoRes.ok) {
-                    const infoData = await infoRes.json();
-                    if (infoData.links && infoData.links.length > 0) {
-                      const unrestrictData = new URLSearchParams();
-                      unrestrictData.append('link', infoData.links[0]);
-
-                      const unrestrictRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-                        body: unrestrictData
-                      });
-
-                      if (unrestrictRes.ok) {
-                        const unData = await unrestrictRes.json();
-                        if (unData.download) {
-                          setResolvedStreamUrl(unData.download);
-                          setPlayerType('video');
-                          setRdStatus('ready');
-                          setActiveServer('debrid');
-                          setLoading(false);
-                          return;
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          // إذا لم ينجح الكاش
+          // fallback
           setRdStatus('failed');
           setActiveServer('vidsrc_cc');
 
         } catch (err) {
-          console.error("RD Fetch Exception:", err);
+          console.error("RD Exception:", err);
           setRdStatus('failed');
           setActiveServer('vidsrc_cc');
         }
@@ -171,33 +106,17 @@ export default function MovieDetail() {
     fetchAllData();
   }, [id, type]);
 
-  // تشغيل مشغل Plyr
+  // تشغيل وربط الفيديو بشكل آمن عند تجهيز الرابط
   useEffect(() => {
-    let plyrInstance = null;
-    if (activeServer === 'debrid' && resolvedStreamUrl && typeof window !== 'undefined') {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.polyfilled.min.js';
-      script.async = true;
-      script.onload = () => {
-        if (window.Plyr && document.getElementById('rd-native-player')) {
-          plyrInstance = new window.Plyr('#rd-native-player', {
-            controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'],
-            ratio: '16:9'
-          });
-        }
-      };
-      document.body.appendChild(script);
-      return () => {
-        if (plyrInstance) plyrInstance.destroy();
-        if (script.parentNode) script.parentNode.removeChild(script);
-      };
+    if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
+      videoRef.current.load();
     }
   }, [activeServer, resolvedStreamUrl]);
 
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري جلب الفيلم مباشرة من Real-Debrid...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل رابط الفيلم المباشر...</h3>
       </div>
     );
   }
@@ -214,15 +133,6 @@ export default function MovieDetail() {
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
-      <Head>
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
-      </Head>
-      
-      <style jsx global>{`
-        html, body, #__next { margin: 0 !important; padding: 0 !important; background-color: #050505 !important; }
-        .plyr { border-radius: 8px; height: 100%; width: 100%; }
-      `}</style>
-
       <button onClick={() => router.push('/')} style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}>
         ← العودة للرئيسية
       </button>
@@ -268,8 +178,16 @@ export default function MovieDetail() {
           {playerType === 'iptv-player' && activeServer === 'debrid' ? (
             <iframe src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen />
           ) : activeServer === 'debrid' && resolvedStreamUrl ? (
-            <video id="rd-native-player" playsInline controls autoPlay style={{ width: '100%', height: '100%' }}>
-              <source src={resolvedStreamUrl} type="video/mp4" />
+            /* مشغل متوافق ومباشر بدون إعلانات */
+            <video 
+              ref={videoRef}
+              controls 
+              autoPlay 
+              playsInline 
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            >
+              <source src={resolvedStreamUrl} />
+              متصفحك لا يدعم تشغيل هذا الفيديو مباشرة.
             </video>
           ) : (
             <iframe 
