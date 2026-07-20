@@ -1,5 +1,5 @@
 // pages/movie/[id].js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 
@@ -16,10 +16,9 @@ export default function MovieDetail() {
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
   const [playerType, setPlayerType] = useState('none');
   const [rdStatus, setRdStatus] = useState('loading');
-  const [activeServer, setActiveServer] = useState('vidsrc_cc');
+  const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
 
-  // 1. جلب بيانات الفيلم والـ Torrentio والـ Real-Debrid من جهة العميل كلياً
   useEffect(() => {
     if (!id) return;
 
@@ -27,7 +26,6 @@ export default function MovieDetail() {
       setLoading(true);
       let finalType = type === 'tv' ? 'tv' : 'movie';
       
-      // التعامل مع البث المباشر المخصص
       if (type === 'live' || id === 'iptv-custom-live') {
         setResolvedStreamUrl("https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8");
         setPlayerType('iptv-player');
@@ -59,7 +57,6 @@ export default function MovieDetail() {
         console.error(e);
       }
 
-      // تشغيل بايبلاين فك روابط ديبريد
       if (mData && imdbId) {
         try {
           const torrentioUrl = `https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`;
@@ -111,6 +108,7 @@ export default function MovieDetail() {
                         }
                       } else {
                         setRdStatus('no_cache');
+                        setActiveServer('vidsrc_cc');
                       }
                     }
                   }
@@ -123,13 +121,16 @@ export default function MovieDetail() {
               }
             } else {
               setRdStatus('no_cache');
+              setActiveServer('vidsrc_cc');
             }
           }
         } catch (err) {
           setRdStatus('no_cache');
+          setActiveServer('vidsrc_cc');
         }
       } else {
         setRdStatus('no_cache');
+        setActiveServer('vidsrc_cc');
       }
       setLoading(false);
     }
@@ -137,7 +138,7 @@ export default function MovieDetail() {
     fetchAllData();
   }, [id, type]);
 
-  // 2. حقن مشغل Plyr ديناميكياً عند جاهزية الرابط واختيار ديبريد
+  // حقن مشغل Plyr الصافي النظيف بدون أي إعلانات
   useEffect(() => {
     let plyrInstance = null;
     if (activeServer === 'debrid' && resolvedStreamUrl && typeof window !== 'undefined') {
@@ -163,7 +164,7 @@ export default function MovieDetail() {
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3>🔄 جاري جلب التورنت وفك شفرة البث...</h3>
+        <h3>🍿 جاري تجهيز البث المباشر بدون إعلانات...</h3>
       </div>
     );
   }
@@ -207,6 +208,7 @@ export default function MovieDetail() {
         </div>
       )}
 
+      {/* أزرار التشغيل والاحتياط */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
         <button 
           onClick={() => setActiveServer('debrid')}
@@ -218,13 +220,12 @@ export default function MovieDetail() {
             border: '1px solid #333'
           }}
         >
-          💎 تشغيل عبر Real-Debrid الأصيل {rdStatus === 'no_cache' && '(لا يوجد كاش)'}
+          ✨ Real-Debrid الأصيل (بدون إعلانات 🛡️) {rdStatus === 'no_cache' && '(بدون كاش)'}
         </button>
         
-        <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>السيرفر الاحتياطي 1</button>
-        <button onClick={() => setActiveServer('vidsrc_to')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_to' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>السيرفر الاحتياطي 2</button>
-        <button onClick={() => setActiveServer('vidlink')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidlink' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>السيرفر الاحتياطي 3</button>
-        <button onClick={() => setActiveServer('smashy')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'smashy' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>السيرفر الاحتياطي 4</button>
+        <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
+        <button onClick={() => setActiveServer('vidsrc_to')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_to' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 2</button>
+        <button onClick={() => setActiveServer('vidlink')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidlink' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 3</button>
       </div>
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
@@ -232,11 +233,19 @@ export default function MovieDetail() {
           {playerType === 'iptv-player' && activeServer === 'debrid' ? (
             <iframe src={`https://www.hlsplayer.net/mp4-player?src=${encodeURIComponent(resolvedStreamUrl)}`} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen />
           ) : activeServer === 'debrid' && resolvedStreamUrl ? (
+            /* 🎥 مشغل HTML5 صافي ومباشر بدون إعلانات نهائياً */
             <video id="rd-native-player" playsInline controls autoPlay style={{ width: '100%', height: '100%' }}>
               <source src={resolvedStreamUrl} type="video/mp4" />
             </video>
           ) : (
-            <iframe src={servers[activeServer]} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen allow="autoplay; encrypted-media; picture-in-picture" />
+            /* 🛡️ السيرفر الاحتياطي مع حماية Sandbox لحجب النوافذ المنبثقة والإنبثاقات */
+            <iframe 
+              src={servers[activeServer]} 
+              style={{ width: '100%', height: '100%', border: 'none' }} 
+              allowFullScreen 
+              allow="autoplay; encrypted-media; picture-in-picture"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+            />
           )}
         </div>
       </div>
