@@ -16,7 +16,7 @@ export default function MovieDetail() {
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
   const [playerType, setPlayerType] = useState('none');
   const [rdStatus, setRdStatus] = useState('loading'); // 'loading' | 'ready' | 'failed'
-  const [statusMessage, setStatusMessage] = useState('جاري البحث عن روابط Real-Debrid الشغالة...');
+  const [statusMessage, setStatusMessage] = useState('جاري فحص كاش Real-Debrid...');
   const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +26,6 @@ export default function MovieDetail() {
     async function fetchAllData() {
       setLoading(true);
       setRdStatus('loading');
-      setStatusMessage('جاري البحث عن روابط Real-Debrid...');
       
       let finalType = type === 'tv' ? 'tv' : 'movie';
       
@@ -58,123 +57,112 @@ export default function MovieDetail() {
           setMovieData(mData);
         }
       } catch (e) {
-        console.error("TMDB Fetch Error:", e);
+        console.error("TMDB Error:", e);
       }
 
       if (mData && imdbId) {
         try {
-          // جلب المصادر المتاحة من Torrentio
-          const torrentioUrl = `https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`;
+          // 1. الاستعلام المباشر من Torrentio المعالج بـ Real-Debrid API المباشر
+          const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${imdbId}.json`;
           const tRes = await fetch(torrentioUrl);
           
           if (tRes.ok) {
             const tData = await tRes.json();
+            
             if (tData && tData.streams && tData.streams.length > 0) {
+              // البحث عن أول رابط سريع ومباشر من Real-Debrid
+              const directStream = tData.streams.find(s => s.url && (s.url.includes('real-debrid') || s.url.startsWith('http')));
               
-              let streamFound = false;
+              if (directStream && directStream.url) {
+                setResolvedStreamUrl(directStream.url);
+                setPlayerType('video');
+                setRdStatus('ready');
+                setActiveServer('debrid');
+                setLoading(false);
+                return;
+              }
+            }
+          }
 
-              // التجربة على أفضل المصادر المتاحة بالتتابع
-              for (const streamTarget of tData.streams) {
-                if (streamFound) break;
+          // 2. المحاولة اليدوية في حال لم يستجب Torrentio المباشر
+          const fallbackTorrentio = `https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`;
+          const fbRes = await fetch(fallbackTorrentio);
+          
+          if (fbRes.ok) {
+            const fbData = await fbRes.json();
+            if (fbData && fbData.streams && fbData.streams.length > 0) {
+              const hashStream = fbData.streams.find(s => s.infoHash);
+              
+              if (hashStream && hashStream.infoHash) {
+                const formData = new URLSearchParams();
+                formData.append('magnet', `magnet:?xt=urn:btih:${hashStream.infoHash}`);
 
-                // 1. في حال كان الرابط جاهز ومباشر
-                if (streamTarget.url && streamTarget.url.startsWith('http')) {
-                  setResolvedStreamUrl(streamTarget.url);
-                  setPlayerType('video');
-                  setRdStatus('ready');
-                  setActiveServer('debrid');
-                  streamFound = true;
-                  break;
-                }
+                const addRes = await fetch(`${RD_API_BASE}/torrents/addMagnet`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+                  body: formData
+                });
 
-                // 2. في حال كان لدينا infoHash تحويله لـ Real-Debrid
-                if (streamTarget.infoHash) {
-                  try {
-                    setStatusMessage('جاري تجهيز الرابط المباشر السريع من Real-Debrid...');
-                    
-                    const addRes = await fetch(`${RD_API_BASE}/torrents/addTorrent`, {
-                      method: 'POST',
-                      headers: { 
-                        'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 
-                        'Content-Type': 'application/x-www-form-urlencoded' 
-                      },
-                      body: `host=real-debrid.com&infoHash=${streamTarget.infoHash}`
-                    });
+                if (addRes.ok) {
+                  const addData = await addRes.json();
+                  const torrentId = addData.id;
 
-                    if (addRes.ok) {
-                      const addData = await addRes.json();
-                      const torrentId = addData.id;
+                  // اختيار الملفات
+                  const selectData = new URLSearchParams();
+                  selectData.append('files', 'all');
 
-                      // اختيار كافة الملفات لتوليد روابط التحميل
-                      await fetch(`${RD_API_BASE}/torrents/selectFiles/${torrentId}`, {
+                  await fetch(`${RD_API_BASE}/torrents/selectFiles/${torrentId}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+                    body: selectData
+                  });
+
+                  // جلب الروابط
+                  const infoRes = await fetch(`${RD_API_BASE}/torrents/info/${torrentId}`, {
+                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
+                  });
+
+                  if (infoRes.ok) {
+                    const infoData = await infoRes.json();
+                    if (infoData.links && infoData.links.length > 0) {
+                      const unrestrictData = new URLSearchParams();
+                      unrestrictData.append('link', infoData.links[0]);
+
+                      const unrestrictRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
                         method: 'POST',
-                        headers: { 
-                          'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 
-                          'Content-Type': 'application/x-www-form-urlencoded' 
-                        },
-                        body: `files=all`
+                        headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+                        body: unrestrictData
                       });
 
-                      // جلب معلومات التورنت
-                      const infoRes = await fetch(`${RD_API_BASE}/torrents/info/${torrentId}`, {
-                        headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-                      });
-
-                      if (infoRes.ok) {
-                        const infoData = await infoRes.json();
-
-                        if (infoData.links && infoData.links.length > 0) {
-                          // تحويل الرابط إلى رابط مباشر بدون تقييد (Unrestrict)
-                          const unrestrictRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
-                            method: 'POST',
-                            headers: { 
-                              'Authorization': `Bearer ${DEBRID_API_TOKEN}`, 
-                              'Content-Type': 'application/x-www-form-urlencoded' 
-                            },
-                            body: `link=${encodeURIComponent(infoData.links[0])}`
-                          });
-
-                          if (unrestrictRes.ok) {
-                            const unrestrictData = await unrestrictRes.json();
-                            if (unrestrictData.download) {
-                              setResolvedStreamUrl(unrestrictData.download);
-                              setPlayerType('video');
-                              setRdStatus('ready');
-                              setActiveServer('debrid');
-                              streamFound = true;
-                              break;
-                            }
-                          }
+                      if (unrestrictRes.ok) {
+                        const unData = await unrestrictRes.json();
+                        if (unData.download) {
+                          setResolvedStreamUrl(unData.download);
+                          setPlayerType('video');
+                          setRdStatus('ready');
+                          setActiveServer('debrid');
+                          setLoading(false);
+                          return;
                         }
                       }
                     }
-                  } catch (rdErr) {
-                    console.error("RD Error for Hash:", streamTarget.infoHash, rdErr);
                   }
                 }
               }
-
-              if (!streamFound) {
-                setRdStatus('failed');
-                setStatusMessage('غير متوفر في كاش Real-Debrid حالياً. يمكنك تجربة السيرفرات الاحتياطية.');
-                setActiveServer('vidsrc_cc');
-              }
-
-            } else {
-              setRdStatus('failed');
-              setStatusMessage('لم يتم العثور على مصادر لهذا الفيلم.');
-              setActiveServer('vidsrc_cc');
             }
           }
-        } catch (err) {
-          console.error("Torrentio error:", err);
+
+          // إذا لم ينجح الكاش
           setRdStatus('failed');
-          setStatusMessage('تعذر الاتصال بمحرك البحث. يرجى اختيار سيرفر احتياطي.');
+          setActiveServer('vidsrc_cc');
+
+        } catch (err) {
+          console.error("RD Fetch Exception:", err);
+          setRdStatus('failed');
           setActiveServer('vidsrc_cc');
         }
       } else {
         setRdStatus('failed');
-        setStatusMessage('لم يتم العثور على بيانات هذا الفيلم.');
         setActiveServer('vidsrc_cc');
       }
       setLoading(false);
@@ -183,7 +171,7 @@ export default function MovieDetail() {
     fetchAllData();
   }, [id, type]);
 
-  // تشغيل مكتبة Plyr عند تجهيز الرابط
+  // تشغيل مشغل Plyr
   useEffect(() => {
     let plyrInstance = null;
     if (activeServer === 'debrid' && resolvedStreamUrl && typeof window !== 'undefined') {
@@ -208,9 +196,8 @@ export default function MovieDetail() {
 
   if (loading) {
     return (
-      <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري فحص وتجهيز رابط Real-Debrid الأصيل...</h3>
-        <p style={{ color: '#aaa', fontSize: '14px' }}>{statusMessage}</p>
+      <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري جلب الفيلم مباشرة من Real-Debrid...</h3>
       </div>
     );
   }
@@ -267,7 +254,7 @@ export default function MovieDetail() {
             border: '1px solid #333'
           }}
         >
-          💎 Real-Debrid الاصيل (بدون إعلانات 🛡️) {rdStatus === 'failed' && '(غير متاح لهذا الفيلم)'}
+          💎 Real-Debrid الأصيل (بدون إعلانات 🛡️) {rdStatus === 'failed' && '(غير متاح لهذا الفيلم)'}
         </button>
         
         <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
