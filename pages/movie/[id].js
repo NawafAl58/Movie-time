@@ -5,6 +5,7 @@ import Head from 'next/head';
 
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+const RD_API_BASE = 'https://api.real-debrid.com/rest/1.0';
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export default function MovieDetail() {
@@ -12,10 +13,10 @@ export default function MovieDetail() {
   const { id, type } = router.query;
   
   const [movieData, setMovieData] = useState(null);
-  const [streamsList, setStreamsList] = useState([]);
-  const [selectedStreamIndex, setSelectedStreamIndex] = useState(0);
-  const [subtitles, setSubtitles] = useState([]);
+  const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
+  const [playerType, setPlayerType] = useState('none');
   const [rdStatus, setRdStatus] = useState('loading');
+  const [errorMessage, setErrorMessage] = useState('');
   const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
 
@@ -27,6 +28,7 @@ export default function MovieDetail() {
     async function fetchAllData() {
       setLoading(true);
       setRdStatus('loading');
+      setErrorMessage('');
       
       let finalType = type === 'tv' ? 'tv' : 'movie';
 
@@ -34,12 +36,12 @@ export default function MovieDetail() {
       let imdbId = null;
 
       try {
-        let res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=ar-SA`);
+        let res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
         if (res.ok) mData = await res.json();
         
         if (!mData || mData.success === false) {
           finalType = finalType === 'movie' ? 'tv' : 'movie';
-          res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=ar-SA`);
+          res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
           if (res.ok) mData = await res.json();
         }
 
@@ -49,12 +51,12 @@ export default function MovieDetail() {
           setMovieData(mData);
         }
       } catch (e) {
-        console.error("TMDB Error:", e);
+        console.error("TMDB Fetch Error:", e);
       }
 
       if (mData && imdbId) {
         try {
-          // 1. جلب قائمة السيرفرات المتاحة من Real-Debrid عبر Torrentio
+          // المحاولة الأولى: جلب الرابط المباشر عبر Torrentio
           const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${imdbId}.json`;
           const tRes = await fetch(torrentioUrl);
           
@@ -62,38 +64,96 @@ export default function MovieDetail() {
             const tData = await tRes.json();
             
             if (tData && tData.streams && tData.streams.length > 0) {
-              const validStreams = tData.streams.filter(s => s.url && s.url.startsWith('http'));
-              if (validStreams.length > 0) {
-                setStreamsList(validStreams);
+              const compatibleStream = tData.streams.find(s => 
+                s.url && (s.url.includes('.mp4') || s.name?.includes('x264') || s.title?.includes('x264'))
+              ) || tData.streams.find(s => s.url && s.url.startsWith('http'));
+
+              if (compatibleStream && compatibleStream.url) {
+                setResolvedStreamUrl(compatibleStream.url);
+                setPlayerType('video');
                 setRdStatus('ready');
                 setActiveServer('debrid');
-              } else {
-                setRdStatus('failed');
-                setActiveServer('vidsrc_cc');
+                setLoading(false);
+                return;
               }
-            } else {
-              setRdStatus('failed');
-              setActiveServer('vidsrc_cc');
             }
           }
 
-          // 2. جلب الترجمات المتاحة (Subtitles)
-          const subRes = await fetch(`https://opensubtitles-v3.strem.fun/subtitles/${finalType}/${imdbId}.json`);
-          if (subRes.ok) {
-            const subData = await subRes.json();
-            if (subData && subData.subtitles) {
-              const arabicAndEngSubs = subData.subtitles.filter(s => s.lang === 'ara' || s.lang === 'eng');
-              setSubtitles(arabicAndEngSubs);
+          // المحاولة الثانية: الاستعلام العادي وتحويل الـ Magnet
+          const fbRes = await fetch(`https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`);
+          if (fbRes.ok) {
+            const fbData = await fbRes.json();
+            if (fbData && fbData.streams && fbData.streams.length > 0) {
+              const firstHash = fbData.streams.find(s => s.infoHash)?.infoHash;
+              
+              if (firstHash) {
+                const formData = new URLSearchParams();
+                formData.append('magnet', `magnet:?xt=urn:btih:${firstHash}`);
+
+                const addRes = await fetch(`${RD_API_BASE}/torrents/addMagnet`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+                  body: formData
+                });
+
+                if (addRes.ok) {
+                  const addData = await addRes.json();
+                  const selectData = new URLSearchParams();
+                  selectData.append('files', 'all');
+
+                  await fetch(`${RD_API_BASE}/torrents/selectFiles/${addData.id}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+                    body: selectData
+                  });
+
+                  const infoRes = await fetch(`${RD_API_BASE}/torrents/info/${addData.id}`, {
+                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
+                  });
+
+                  if (infoRes.ok) {
+                    const infoData = await infoRes.json();
+                    if (infoData.links && infoData.links.length > 0) {
+                      const unrestrictData = new URLSearchParams();
+                      unrestrictData.append('link', infoData.links[0]);
+
+                      const unRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
+                        body: unrestrictData
+                      });
+
+                      if (unRes.ok) {
+                        const unData = await unRes.json();
+                        if (unData.download) {
+                          setResolvedStreamUrl(unData.download);
+                          setPlayerType('video');
+                          setRdStatus('ready');
+                          setActiveServer('debrid');
+                          setLoading(false);
+                          return;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
+
+          setRdStatus('failed');
+          setErrorMessage('لم يتم العثور على رابط جاهز في الكاش حالياً.');
+          setActiveServer('vidsrc_cc');
 
         } catch (err) {
-          console.error("Fetch Exception:", err);
+          console.error("RD Fetch Error:", err);
           setRdStatus('failed');
+          setErrorMessage('حدث خطأ أثناء الاتصال بسيرفر Real-Debrid.');
           setActiveServer('vidsrc_cc');
         }
       } else {
         setRdStatus('failed');
+        setErrorMessage('تعذر العثور على معرّف الفيلم.');
         setActiveServer('vidsrc_cc');
       }
       setLoading(false);
@@ -103,22 +163,21 @@ export default function MovieDetail() {
   }, [id, type]);
 
   useEffect(() => {
-    if (activeServer === 'debrid' && streamsList.length > 0 && videoRef.current) {
+    if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
       videoRef.current.load();
     }
-  }, [activeServer, selectedStreamIndex, streamsList]);
+  }, [activeServer, resolvedStreamUrl]);
 
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل الميديا والترجمات...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري التحقق من سيرفر Real-Debrid...</h3>
       </div>
     );
   }
 
   const mediaTypeFixed = type === 'tv' ? 'tv' : 'movie';
-  const displayTitle = movieData ? (movieData.title || movieData.name) : 'مشاهدة 📺';
-  const currentStream = streamsList[selectedStreamIndex];
+  const displayTitle = movieData ? (movieData.title || movieData.name) : 'بث مباشر 📺';
 
   const servers = {
     vidsrc_cc: `https://vidsrc.cc/v2/embed/${mediaTypeFixed}/${id}`,
@@ -147,25 +206,7 @@ export default function MovieDetail() {
         </div>
       )}
 
-      {/* أزرار السيرفرات المتاحة من Real-Debrid */}
-      {activeServer === 'debrid' && streamsList.length > 0 && (
-        <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
-          <label style={{ color: '#aaa', fontSize: '14px', display: 'block', marginBottom: '8px' }}>💬 اختر سيرفر Real-Debrid المفضل:</label>
-          <select 
-            value={selectedStreamIndex} 
-            onChange={(e) => setSelectedStreamIndex(Number(e.target.value))}
-            style={{ width: '100%', padding: '10px', backgroundColor: '#000', color: '#fff', border: '1px solid #444', borderRadius: '6px' }}
-          >
-            {streamsList.map((stream, idx) => (
-              <option key={idx} value={idx}>
-                سيرفر Real-Debrid #{idx + 1} - {stream.title || stream.name || 'رابط مباشر'}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* أزرار المشغلات والسيرفرات الاحتياطية */}
+      {/* أزرار السيرفرات */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
         <button 
           onClick={() => setActiveServer('debrid')}
@@ -178,17 +219,18 @@ export default function MovieDetail() {
             border: '1px solid #333'
           }}
         >
-          💎 Real-Debrid (بدون إعلانات)
+          💎 Real-Debrid الأصيل (بدون إعلانات 🛡️) {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
         </button>
         
         <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
         <button onClick={() => setActiveServer('vidsrc_to')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_to' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 2</button>
         <button onClick={() => setActiveServer('vidlink')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidlink' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 3</button>
+        <button onClick={() => setActiveServer('smashy')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'smashy' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 4</button>
       </div>
 
       <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-          {activeServer === 'debrid' && currentStream ? (
+          {activeServer === 'debrid' && resolvedStreamUrl ? (
             <video 
               ref={videoRef}
               controls 
@@ -196,19 +238,7 @@ export default function MovieDetail() {
               playsInline 
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             >
-              <source src={currentStream.url} />
-              {/* حقن قائمة الترجمات المباشرة داخل المشغل */}
-              {subtitles.map((sub, index) => (
-                <track 
-                  key={index}
-                  kind="subtitles"
-                  src={sub.url}
-                  srcLang={sub.lang === 'ara' ? 'ar' : 'en'}
-                  label={sub.lang === 'ara' ? 'العربية 🇸🇦' : 'English 🇬🇧'}
-                  default={index === 0 && sub.lang === 'ara'}
-                />
-              ))}
-              متصفحك لا يدعم تشغيل هذا الفيديو.
+              <source src={resolvedStreamUrl} />
             </video>
           ) : (
             <iframe 
