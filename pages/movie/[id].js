@@ -14,11 +14,14 @@ export default function MovieDetail() {
   
   const [movieData, setMovieData] = useState(null);
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
-  const [playerType, setPlayerType] = useState('none');
   const [rdStatus, setRdStatus] = useState('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
+
+  // المتغيرات الخاصة بالمسلسلات (افتراضياً الموسم 1 الحلقة 1)
+  const [season, setSeason] = useState(1);
+  const [episode, setEpisode] = useState(1);
 
   const videoRef = useRef(null);
 
@@ -31,7 +34,6 @@ export default function MovieDetail() {
       setErrorMessage('');
       
       let finalType = type === 'tv' ? 'tv' : 'movie';
-
       let mData = null;
       let imdbId = null;
 
@@ -56,8 +58,11 @@ export default function MovieDetail() {
 
       if (mData && imdbId) {
         try {
-          // المحاولة الأولى: جلب الرابط المباشر عبر Torrentio
-          const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${imdbId}.json`;
+          // بناء صيغة الاستعلام: إذا كان مسلسلاً نطلب الموسم والحلقة
+          const queryTarget = finalType === 'tv' ? `${imdbId}:${season}:${episode}` : imdbId;
+
+          // 1. طلب Torrentio المباشر مع Real-Debrid
+          const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${queryTarget}.json`;
           const tRes = await fetch(torrentioUrl);
           
           if (tRes.ok) {
@@ -70,7 +75,6 @@ export default function MovieDetail() {
 
               if (compatibleStream && compatibleStream.url) {
                 setResolvedStreamUrl(compatibleStream.url);
-                setPlayerType('video');
                 setRdStatus('ready');
                 setActiveServer('debrid');
                 setLoading(false);
@@ -79,8 +83,8 @@ export default function MovieDetail() {
             }
           }
 
-          // المحاولة الثانية: الاستعلام العادي وتحويل الـ Magnet
-          const fbRes = await fetch(`https://torrentio.strem.fun/stream/${finalType}/${imdbId}.json`);
+          // 2. المحاولة الاحتياطية
+          const fbRes = await fetch(`https://torrentio.strem.fun/stream/${finalType}/${queryTarget}.json`);
           if (fbRes.ok) {
             const fbData = await fbRes.json();
             if (fbData && fbData.streams && fbData.streams.length > 0) {
@@ -127,7 +131,6 @@ export default function MovieDetail() {
                         const unData = await unRes.json();
                         if (unData.download) {
                           setResolvedStreamUrl(unData.download);
-                          setPlayerType('video');
                           setRdStatus('ready');
                           setActiveServer('debrid');
                           setLoading(false);
@@ -142,25 +145,25 @@ export default function MovieDetail() {
           }
 
           setRdStatus('failed');
-          setErrorMessage('لم يتم العثور على رابط جاهز في الكاش حالياً.');
+          setErrorMessage('لم يتم العثور على كاش جاهز لهذه الحلقة.');
           setActiveServer('vidsrc_cc');
 
         } catch (err) {
           console.error("RD Fetch Error:", err);
           setRdStatus('failed');
-          setErrorMessage('حدث خطأ أثناء الاتصال بسيرفر Real-Debrid.');
+          setErrorMessage('خطأ في الاتصال بالسيرفر.');
           setActiveServer('vidsrc_cc');
         }
       } else {
         setRdStatus('failed');
-        setErrorMessage('تعذر العثور على معرّف الفيلم.');
+        setErrorMessage('تعذر جلب معرّف المحتوى.');
         setActiveServer('vidsrc_cc');
       }
       setLoading(false);
     }
 
     fetchAllData();
-  }, [id, type]);
+  }, [id, type, season, episode]);
 
   useEffect(() => {
     if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
@@ -171,18 +174,23 @@ export default function MovieDetail() {
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري التحقق من سيرفر Real-Debrid...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري جلب البث المباشر...</h3>
       </div>
     );
   }
 
-  const mediaTypeFixed = type === 'tv' ? 'tv' : 'movie';
+  const isTvShow = (type === 'tv' || movieData?.media_type_fixed === 'tv');
+  const mediaTypeFixed = isTvShow ? 'tv' : 'movie';
   const displayTitle = movieData ? (movieData.title || movieData.name) : 'بث مباشر 📺';
 
+  const embedUrl = isTvShow 
+    ? `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`
+    : `https://vidsrc.cc/v2/embed/movie/${id}`;
+
   const servers = {
-    vidsrc_cc: `https://vidsrc.cc/v2/embed/${mediaTypeFixed}/${id}`,
-    vidsrc_to: `https://vidsrc.to/embed/${mediaTypeFixed}/${id}`,
-    vidlink: `https://vidlink.pro/embed/${mediaTypeFixed}/${id}`,
+    vidsrc_cc: embedUrl,
+    vidsrc_to: isTvShow ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}` : `https://vidsrc.to/embed/movie/${id}`,
+    vidlink: isTvShow ? `https://vidlink.pro/embed/tv/${id}/${season}/${episode}` : `https://vidlink.pro/embed/movie/${id}`,
     smashy: `https://embed.smashystream.com/playere.php?tmdb=${id}`
   };
 
@@ -193,7 +201,7 @@ export default function MovieDetail() {
       </button>
 
       {movieData && (
-        <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginBottom: '20px' }}>
           <img src={movieData.poster_path ? `https://image.tmdb.org/t/p/w300${movieData.poster_path}` : 'https://via.placeholder.com/300x450'} alt={displayTitle} style={{ borderRadius: '12px', width: '220px', objectFit: 'cover' }} />
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
@@ -203,6 +211,32 @@ export default function MovieDetail() {
             </div>
             <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>{movieData.overview || "لا يوجد وصف متاح حالياً."}</p>
           </div>
+        </div>
+      )}
+
+      {/* خيارات المواسم والحلقات عند اختيار مسلسل */}
+      {isTvShow && (
+        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            الموسم:
+            <input 
+              type="number" 
+              min="1" 
+              value={season} 
+              onChange={(e) => setSeason(Number(e.target.value))} 
+              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px' }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            الحلقة:
+            <input 
+              type="number" 
+              min="1" 
+              value={episode} 
+              onChange={(e) => setEpisode(Number(e.target.value))} 
+              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px' }}
+            />
+          </label>
         </div>
       )}
 
