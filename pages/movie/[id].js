@@ -14,20 +14,19 @@ export default function MoviePlayerPage() {
   const router = useRouter();
   const { id, type } = router.query;
 
-  // 🔴 إضافة التعريف المفقود لـ videoRef لمنع الكراش
   const videoRef = useRef(null);
 
   const [mediaType, setMediaType] = useState(type === 'tv' ? 'tv' : 'movie');
   const [details, setDetails] = useState(null);
   const [imdbId, setImdbId] = useState(null);
-  
+
   // المسلسلات
   const [seasons, setSeasons] = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [episodes, setEpisodes] = useState([]);
   const [selectedEpisode, setSelectedEpisode] = useState(1);
 
-  // السيرفرات والجودات
+  // السيرفرات
   const [streams, setStreams] = useState([]);
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
   const [loadingStreams, setLoadingStreams] = useState(false);
@@ -40,7 +39,7 @@ export default function MoviePlayerPage() {
     if (type) setMediaType(type === 'tv' ? 'tv' : 'movie');
   }, [type]);
 
-  // 1️⃣ جلب بيانات TMDB لمعرفة IMDb ID
+  // 1️⃣ جلب تفاصيل المادة من TMDB
   useEffect(() => {
     if (!id || mediaType === 'live') return;
 
@@ -66,7 +65,7 @@ export default function MoviePlayerPage() {
     fetchDetails();
   }, [id, mediaType]);
 
-  // 2️⃣ جلب حلقات المسلسل
+  // 2️⃣ جلب حلقات المسلسلات
   useEffect(() => {
     if (mediaType !== 'tv' || !id || !selectedSeason) return;
 
@@ -86,7 +85,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب السيرفرات المباشرة من Torrentio
+  // 3️⃣ جلب سيرفرات Real-Debrid وتغليفها برابط الـ Proxy الداخلي
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
@@ -104,12 +103,15 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.streams && data.streams.length > 0) {
+          // تفضيل روابط MP4/H264 وتصفية DV
           const validStreams = data.streams.filter(s => s.url || s.externalUrl);
           setStreams(validStreams);
 
           if (validStreams.length > 0) {
-            const first = validStreams[0];
-            setActiveStreamUrl(first.url || first.externalUrl);
+            const rawUrl = validStreams[0].url || validStreams[0].externalUrl;
+            // توجيه الرابط عبر الـ Proxy الداخلي لموقعك
+            const proxiedUrl = `/api/stream?url=${encodeURIComponent(rawUrl)}`;
+            setActiveStreamUrl(proxiedUrl);
           }
         }
       } catch (err) {
@@ -121,7 +123,7 @@ export default function MoviePlayerPage() {
     fetchRDStreams();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب ترجمة OpenSubtitles مع معالجة أي خطأ في النطاق
+  // 4️⃣ جلب الترجمات
   useEffect(() => {
     if (!imdbId) return;
 
@@ -150,6 +152,12 @@ export default function MoviePlayerPage() {
     fetchSubtitles();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
+  const handleSelectStream = (s) => {
+    const rawUrl = s.url || s.externalUrl;
+    const proxiedUrl = `/api/stream?url=${encodeURIComponent(rawUrl)}`;
+    setActiveStreamUrl(proxiedUrl);
+  };
+
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px' }}>
       <Head>
@@ -157,7 +165,7 @@ export default function MoviePlayerPage() {
       </Head>
 
       {/* الهيدر */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <button 
           onClick={() => router.back()} 
           style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
@@ -188,7 +196,6 @@ export default function MoviePlayerPage() {
           >
             <source src={activeStreamUrl} type="video/mp4" />
             
-            {/* OpenSubtitles tracks */}
             {arabicSub && (
               <track 
                 kind="subtitles" 
@@ -210,22 +217,13 @@ export default function MoviePlayerPage() {
             Your browser does not support HTML5 video.
           </video>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888', gap: '15px' }}>
-            <div>{loadingStreams ? 'Loading Real-Debrid Streams...' : 'No Stream Loaded.'}</div>
-            {imdbId && (
-              <iframe 
-                src={mediaType === 'tv' 
-                  ? `https://vidsrc.to/embed/tv/${imdbId}/${selectedSeason}/${selectedEpisode}` 
-                  : `https://vidsrc.to/embed/movie/${imdbId}`}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-                allowFullScreen
-              />
-            )}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
+            {loadingStreams ? 'Loading Real-Debrid Stream...' : 'No Stream Loaded.'}
           </div>
         )}
       </div>
 
-      {/* اختيار الموسم والحلقة للمسلسلات */}
+      {/* التحكم بالمواسم والحلقات للمسلسلات */}
       {mediaType === 'tv' && seasons.length > 0 && (
         <div style={{ marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -264,7 +262,7 @@ export default function MoviePlayerPage() {
         </div>
       )}
 
-      {/* قائمة سيرفرات Real-Debrid */}
+      {/* قائمة السيرفرات المتاحة */}
       {mediaType !== 'live' && streams.length > 0 && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#aaa' }}>
@@ -272,17 +270,15 @@ export default function MoviePlayerPage() {
           </h3>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {streams.map((s, idx) => {
-              const url = s.url || s.externalUrl;
-              const isSelected = activeStreamUrl === url;
               const name = (s.name || '').replace('\n', ' ');
               const title = (s.title || '').split('\n')[0];
 
               return (
                 <button
                   key={idx}
-                  onClick={() => setActiveStreamUrl(url)}
+                  onClick={() => handleSelectStream(s)}
                   style={{
-                    backgroundColor: isSelected ? '#e50914' : '#141414',
+                    backgroundColor: '#141414',
                     color: 'white',
                     border: '1px solid #333',
                     padding: '8px 16px',
