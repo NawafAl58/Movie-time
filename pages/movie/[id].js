@@ -6,11 +6,9 @@ import Head from 'next/head';
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
-// 🔴 ضع الـ API Token الخاص بك هنا
+// 🔑 تم إدراج API Token الخاص بك هنا
 const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
-const TORRENTIO_BASE_URL = RD_API_KEY && RD_API_KEY !== 'YOUR_REAL_DEBRID_API_KEY'
-  ? `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`
-  : 'https://torrentio.strem.fun';
+const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`;
 
 export default function MoviePlayerPage() {
   const router = useRouter();
@@ -31,7 +29,7 @@ export default function MoviePlayerPage() {
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
   const [loadingStreams, setLoadingStreams] = useState(false);
 
-  // الترجمات المحولة إلى Blob URLs
+  // الترجمات المحولة إلى Blob URLs لتفادي حظر المتصفح (CORS)
   const [arabicSubBlob, setArabicSubBlob] = useState('');
   const [englishSubBlob, setEnglishSubBlob] = useState('');
   const videoRef = useRef(null);
@@ -86,7 +84,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب وتصفية وتجميع السيرفرات حسب الجودة تلقائياً
+  // 3️⃣ جلب وتجميع الأقسام حسب الجودات (4K, 2K, 1080p, 720p, 480p) واختيار الأسرع تلقائياً
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
@@ -110,7 +108,6 @@ export default function MoviePlayerPage() {
           data.streams.forEach(stream => {
             const fullText = `${stream.name || ''} ${stream.title || ''}`.toLowerCase();
             
-            // تحديد الجودة
             let quality = '720p';
             if (fullText.includes('4k') || fullText.includes('2160p')) quality = '4K';
             else if (fullText.includes('1440p') || fullText.includes('2k')) quality = '2K';
@@ -118,14 +115,12 @@ export default function MoviePlayerPage() {
             else if (fullText.includes('720p')) quality = '720p';
             else if (fullText.includes('480p') || fullText.includes('360p')) quality = '480p';
 
-            // تجنب صيغ DV المصنوعة خصيصاً للشاشات المعقدة إن أمكن لتفادي الشاشة السوداء
             const isDV = fullText.includes(' dv ') || fullText.includes('dolby vision');
             
             if (!qualityGroups[quality]) {
               qualityGroups[quality] = [];
             }
 
-            // ترتيب السيرفرات داخل الجودة بتفضيل السريعة (Cached Real-Debrid)
             if (!isDV) {
               qualityGroups[quality].unshift(stream);
             } else {
@@ -139,7 +134,6 @@ export default function MoviePlayerPage() {
           setGroupedQualityStreams(qualityGroups);
           setAvailableQualities(existingQualities);
 
-          // اختيار أفضل جودة وسيرفر تلقائياً (تفضيل 1080p أو 4K)
           const defaultQuality = existingQualities.includes('1080p') ? '1080p' : existingQualities[0];
           if (defaultQuality) {
             setSelectedQuality(defaultQuality);
@@ -157,7 +151,7 @@ export default function MoviePlayerPage() {
     fetchRDStreams();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب وتحويل الترجمات إلى Blob WebVTT لتشغيلها المباشر بدون مشاكل CORS
+  // 4️⃣ جلب الترجمات وتحويلها تلقائياً إلى Blob WebVTT
   useEffect(() => {
     if (!imdbId) return;
 
@@ -180,7 +174,6 @@ export default function MoviePlayerPage() {
               const subRes = await fetch(subObj.url);
               let text = await subRes.text();
 
-              // تحويل صيغة SRT إلى WebVTT إذا تطلب الأمر
               if (!text.startsWith('WEBVTT')) {
                 text = 'WEBVTT\n\n' + text
                   .replace(/(\d\d:\d\d:\d\d),(\d\d\d)/g, '$1.$2')
@@ -210,7 +203,6 @@ export default function MoviePlayerPage() {
     fetchAndConvertSubtitles();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // التبديل بين الجودات المتاحة
   const handleQualityChange = (quality) => {
     setSelectedQuality(quality);
     const streamsList = groupedQualityStreams[quality];
@@ -240,7 +232,7 @@ export default function MoviePlayerPage() {
         </h1>
       </div>
 
-      {/* مشغل الفيديو الشامل مع شاشات الجودة والترجمة المصححة */}
+      {/* مشغل الفيديو الشامل */}
       <div style={{ width: '100%', height: '68vh', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1c1c1c', position: 'relative', marginBottom: '20px' }}>
         {mediaType === 'live' ? (
           <iframe 
@@ -260,7 +252,7 @@ export default function MoviePlayerPage() {
           >
             <source src={activeStreamUrl} type="video/mp4" />
             
-            {/* 🔴 الترجمة العربية المصححة عبر Blob VTT */}
+            {/* الترجمة العربية */}
             {arabicSubBlob && (
               <track 
                 kind="subtitles" 
@@ -271,7 +263,7 @@ export default function MoviePlayerPage() {
               />
             )}
 
-            {/* 🔵 الترجمة الإنجليزية المصححة */}
+            {/* الترجمة الإنجليزية */}
             {englishSubBlob && (
               <track 
                 kind="subtitles" 
@@ -328,7 +320,7 @@ export default function MoviePlayerPage() {
         </div>
       )}
 
-      {/* أزرار اختيار الجودة النظيفة (بدون تكرار أو ازدحام) */}
+      {/* أزرار اختيار الجودة النظيفة */}
       {mediaType !== 'live' && availableQualities.length > 0 && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#aaa' }}>
