@@ -1,107 +1,240 @@
-export default async function handler(req, res) {
-  // 1. Ensure method is POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+import { useRouter } from 'next/router';
+import { useEffect, useState, useRef } from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
 
-  try {
-    const { link } = req.body || {};
-    const RD_API_KEY =
-      process.env.NEXT_PUBLIC_REAL_DEBRID_API_KEY ||
-      process.env.REAL_DEBRID_API_KEY;
+export default function MoviePlayer() {
+  const router = useRouter();
+  const { id } = router.query;
 
-    if (!link) {
-      return res.status(400).json({ error: 'Missing stream link.' });
-    }
+  const [movie, setMovie] = useState(null);
+  const [streams, setStreams] = useState([]);
+  const [selectedStream, setSelectedStream] = useState(null);
+  const [videoSrc, setVideoSrc] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [statusText, setStatusText] = useState('Loading movie...');
 
-    if (!RD_API_KEY) {
-      return res.status(400).json({ error: 'Real-Debrid API Key is not configured in Vercel.' });
-    }
+  const videoRef = useRef(null);
+  const hlsRef = useRef(null);
 
-    const authHeaders = {
-      'Authorization': `Bearer ${RD_API_KEY}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
+  const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
 
-    // Case A: Magnet Links
-    if (typeof link === 'string' && link.startsWith('magnet:')) {
-      const addMagnetBody = new URLSearchParams({ magnet: link });
-      const addRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
-        method: 'POST',
-        headers: authHeaders,
-        body: addMagnetBody.toString(),
-      });
+  // 1. Fetch Movie Info from TMDB
+  useEffect(() => {
+    if (!id) return;
 
-      const addData = await addRes.json().catch(() => ({}));
-
-      if (!addRes.ok) {
-        if (addData.error === 'infringing_file') {
-          return res.status(400).json({ error: 'This file is blocked by Real-Debrid due to DMCA. Please try another server.' });
-        }
-        return res.status(400).json({ error: addData.error || 'Failed to add magnet to Real-Debrid.' });
+    async function fetchMovieDetails() {
+      try {
+        const res = await fetch(
+          `https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_API_KEY}&language=en-US`
+        );
+        if (!res.ok) throw new Error('Failed to fetch movie details');
+        const data = await res.json();
+        setMovie(data);
+        fetchStreams(data.imdb_id || id);
+      } catch (err) {
+        console.error(err);
+        setStatusText('Failed to load movie details.');
+        setLoading(false);
       }
+    }
 
-      const torrentId = addData.id;
+    fetchMovieDetails();
+  }, [id]);
 
-      // Select all files
-      const selectFileBody = new URLSearchParams({ files: 'all' });
-      await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: selectFileBody.toString(),
-      });
+  // 2. Fetch Compatible Web Streams Only
+  async function fetchStreams(imdbId) {
+    try {
+      setStatusText('Finding web-compatible servers...');
+      
+      // Filter out heavy 4K/CAM formats for optimal browser playback
+      const torrentioUrl = `https://torrentio.strem.fun/qualityfilter=4k,scr,cam|sort=quality/stream/movie/${imdbId}.json`;
 
-      // Get torrent info
-      const infoRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`, {
-        headers: { 'Authorization': `Bearer ${RD_API_KEY}` },
-      });
+      const res = await fetch(torrentioUrl);
+      const data = await res.json();
 
-      const infoData = await infoRes.json().catch(() => ({}));
-
-      if (infoData.links && infoData.links.length > 0) {
-        const targetLink = infoData.links[0];
-        const unrestrictBody = new URLSearchParams({ link: targetLink });
-        const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
-          method: 'POST',
-          headers: authHeaders,
-          body: unrestrictBody.toString(),
-        });
-
-        const finalData = await unrestrictRes.json().catch(() => ({}));
-        if (!unrestrictRes.ok) {
-          return res.status(400).json({ error: finalData.error || 'Failed to unrestrict link.' });
-        }
-
-        return res.status(200).json({ downloadUrl: finalData.download });
+      if (data.streams && data.streams.length > 0) {
+        setStreams(data.streams);
+        // Start auto-testing from the first stream index
+        handleSelectStream(data.streams[0], 0, data.streams);
       } else {
-        return res.status(400).json({ error: 'Torrent is still caching on Real-Debrid. Select another server.' });
+        setStatusText('No streams found for this title.');
+        setLoading(false);
       }
-    } 
-    
-    // Case B: Direct HTTP/HTTPS Links
-    else {
-      const formData = new URLSearchParams({ link });
-      const rdRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+    } catch (err) {
+      console.error(err);
+      setStatusText('Error loading streams.');
+      setLoading(false);
+    }
+  }
+
+  // 3. Unrestrict Link with Auto-Fallback for DMCA-blocked streams
+  async function handleSelectStream(stream, currentIndex = 0, currentStreamsList = streams) {
+    const listToUse = currentStreamsList.length > 0 ? currentStreamsList : streams;
+    setSelectedStream(stream);
+    setLoading(true);
+    setVideoSrc('');
+    setStatusText(`Testing server ${currentIndex + 1} of ${listToUse.length}...`);
+
+    try {
+      let rawStreamLink = stream.url || stream.externalUrl;
+      if (!rawStreamLink && stream.infoHash) {
+        rawStreamLink = `magnet:?xt=urn:btih:${stream.infoHash}`;
+      }
+
+      const res = await fetch('/api/unrestrict', {
         method: 'POST',
-        headers: authHeaders,
-        body: formData.toString(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link: rawStreamLink }),
       });
 
-      const data = await rdRes.json().catch(() => ({}));
+      const data = await res.json();
 
-      if (!rdRes.ok) {
-        if (data.error === 'infringing_file') {
-          return res.status(400).json({ error: 'This file is blocked by Real-Debrid due to DMCA. Please try another server.' });
+      if (!res.ok) {
+        // إذا كان السيرفر محظور بـ DMCA أو فيه مشكلة، جرب السيرفر الذي يليه تلقائياً
+        if (currentIndex + 1 < listToUse.length) {
+          setStatusText(`Server ${currentIndex + 1} unavailable. Auto-switching to server ${currentIndex + 2}...`);
+          setTimeout(() => {
+            handleSelectStream(listToUse[currentIndex + 1], currentIndex + 1, listToUse);
+          }, 400);
+          return;
+        } else {
+          throw new Error('All available servers for this movie are currently blocked by DMCA.');
         }
-        return res.status(rdRes.status || 400).json({ error: data.error || 'Failed to unrestrict link.' });
       }
 
-      return res.status(200).json({ downloadUrl: data.download });
+      // إذا نجح الفك، شغل الفيديو فوراً
+      setVideoSrc(data.downloadUrl);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setStatusText(err.message || 'Error preparing video.');
+      setLoading(false);
+    }
+  }
+
+  // 4. Attach Stream to Native HTML5 Player
+  useEffect(() => {
+    if (!videoSrc || !videoRef.current) return;
+
+    if (videoSrc.endsWith('.m3u8')) {
+      import('hls.js').then((HlsModule) => {
+        const Hls = HlsModule.default;
+        if (Hls.isSupported()) {
+          if (hlsRef.current) hlsRef.current.destroy();
+          const hls = new Hls();
+          hls.loadSource(videoSrc);
+          hls.attachMedia(videoRef.current);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            videoRef.current.play().catch(() => {});
+          });
+          hlsRef.current = hls;
+        } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+          videoRef.current.src = videoSrc;
+          videoRef.current.play().catch(() => {});
+        }
+      });
+    } else {
+      videoRef.current.src = videoSrc;
+      videoRef.current.play().catch(() => {});
     }
 
-  } catch (err) {
-    console.error('API Error:', err);
-    // Always return valid JSON even on unexpected errors
-    return res.status(500).json({ error: err.message || 'Internal Server Error' });
-  }
+    return () => {
+      if (hlsRef.current) hlsRef.current.destroy();
+    };
+  }, [videoSrc]);
+
+  return (
+    <div style={{ backgroundColor: '#0a0a0a', color: '#fff', minHeight: '100vh', margin: 0, padding: 0, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <Head>
+        <title>{movie ? (movie.title || movie.original_title) : 'Cinematrix'}</title>
+        <style>{`
+          html, body { margin: 0; padding: 0; background-color: #0a0a0a; }
+          * { box-sizing: border-box; }
+        `}</style>
+      </Head>
+
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '20px' }}>
+        {/* Header Navigation */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <Link href="/" style={{ color: '#fff', textDecoration: 'none', background: '#222', padding: '8px 16px', borderRadius: '6px', fontSize: '14px', fontWeight: 'bold' }}>
+            ← Back
+          </Link>
+          <h1 style={{ fontSize: '20px', color: '#e50914', margin: 0, fontWeight: '700' }}>
+            {movie?.title || movie?.original_title}
+          </h1>
+        </div>
+
+        {/* In-Browser Video Player Frame */}
+        <div style={{ width: '100%', height: '540px', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #222', boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+              <div style={{ fontSize: '28px', marginBottom: '12px' }}>🎬</div>
+              <p style={{ margin: 0, fontSize: '15px', color: '#ccc' }}>{statusText}</p>
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              controls
+              autoPlay
+              playsInline
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          )}
+        </div>
+
+        {/* Optional Player Links (For Mobile / External Player Fallback) */}
+        {!loading && videoSrc && (
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '20px' }}>
+            <a
+              href={`vlc://${videoSrc}`}
+              style={{ backgroundColor: '#ff8800', color: '#fff', textDecoration: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px' }}
+            >
+              ▶ Open in VLC
+            </a>
+            <a
+              href={`infuse://x-callback-url/play?url=${encodeURIComponent(videoSrc)}`}
+              style={{ backgroundColor: '#0070f3', color: '#fff', textDecoration: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px' }}
+            >
+              ▶ Open in Infuse (iPad)
+            </a>
+          </div>
+        )}
+
+        {/* Available Servers Grid */}
+        <div style={{ marginTop: '25px' }}>
+          <h3 style={{ fontSize: '15px', color: '#ccc', marginBottom: '12px' }}>
+            Available Servers ({streams.length}):
+          </h3>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {streams.map((stream, idx) => {
+              const isSelected = selectedStream === stream;
+              const title = stream.title || stream.name || `Server ${idx + 1}`;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => handleSelectStream(stream, idx, streams)}
+                  style={{
+                    backgroundColor: isSelected ? '#e50914' : '#181818',
+                    color: isSelected ? '#fff' : '#aaa',
+                    border: isSelected ? '1px solid #e50914' : '1px solid #333',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    maxWidth: '260px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {title.split('\n')[0]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
