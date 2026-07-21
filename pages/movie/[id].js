@@ -5,7 +5,6 @@ import Head from 'next/head';
 
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const RD_API_BASE = 'https://api.real-debrid.com/rest/1.0';
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
 export default function MovieDetail() {
@@ -26,10 +25,9 @@ export default function MovieDetail() {
   const videoRef = useRef(null);
   const plyrInstance = useRef(null);
 
-  // تهيئة وربط مشغل Plyr فور توفر الرابط
+  // تهيئة وربط مشغل Plyr مع معالجة الأخطاء
   useEffect(() => {
     if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
-      // تحميل ملف الـ CSS الخاص بـ Plyr
       if (!document.getElementById('plyr-css')) {
         const link = document.createElement('link');
         link.id = 'plyr-css';
@@ -38,20 +36,16 @@ export default function MovieDetail() {
         document.head.appendChild(link);
       }
 
-      // تحميل مكتبة JS وتفعيلها
       const initPlyr = () => {
-        if (window.Plyr) {
-          if (plyrInstance.current) {
-            plyrInstance.current.destroy();
-          }
+        if (window.Plyr && videoRef.current) {
+          if (plyrInstance.current) plyrInstance.current.destroy();
           plyrInstance.current = new window.Plyr(videoRef.current, {
             controls: [
               'play-large', 'play', 'progress', 'current-time', 
               'duration', 'mute', 'volume', 'captions', 'settings', 
-              'pip', 'airplay', 'fullscreen'
+              'pip', 'fullscreen'
             ],
-            settings: ['captions', 'quality', 'speed'],
-            captions: { active: true, update: true, language: 'ar' }
+            settings: ['captions', 'quality', 'speed']
           });
         }
       };
@@ -74,48 +68,47 @@ export default function MovieDetail() {
     };
   }, [resolvedStreamUrl, activeServer]);
 
+  // جلب البيانات معالجة أخطاء جلب البث
   useEffect(() => {
     if (!id) return;
 
-    async function fetchAllData() {
+    let isMounted = true;
+
+    async function fetchStreamData() {
       setLoading(true);
       setRdStatus('loading');
       setErrorMessage('');
-      
-      let finalType = type === 'tv' ? 'tv' : 'movie';
-      let mData = null;
-      let imdbId = null;
+
+      const isTv = type === 'tv';
+      const finalType = isTv ? 'tv' : 'movie';
 
       try {
+        // 1. جلب بيانات TMDB
         let res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
+        let mData = null;
         if (res.ok) mData = await res.json();
-        
+
         if (!mData || mData.success === false) {
-          finalType = finalType === 'movie' ? 'tv' : 'movie';
-          res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
+          const altType = finalType === 'movie' ? 'tv' : 'movie';
+          res = await fetch(`${TMDB_BASE_URL}/${altType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
           if (res.ok) mData = await res.json();
         }
 
-        if (mData && mData.success !== false) {
-          mData.media_type_fixed = finalType;
-          imdbId = mData.external_ids?.imdb_id;
+        if (isMounted && mData) {
           setMovieData(mData);
         }
-      } catch (e) {
-        console.error("TMDB Fetch Error:", e);
-      }
 
-      if (mData && imdbId) {
-        try {
-          const queryTarget = finalType === 'tv' ? `${imdbId}:${season}:${episode}` : imdbId;
+        const imdbId = mData?.external_ids?.imdb_id;
 
+        if (imdbId) {
+          const queryTarget = isTv ? `${imdbId}:${season}:${episode}` : imdbId;
           const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${queryTarget}.json`;
+
           const tRes = await fetch(torrentioUrl);
-          
+
           if (tRes.ok) {
             const tData = await tRes.json();
-            
-            if (tData && tData.streams && tData.streams.length > 0) {
+            if (tData?.streams?.length > 0) {
               const validStreams = tData.streams.filter(s => s.url && s.url.startsWith('http'));
 
               const mappedQualities = [];
@@ -138,9 +131,8 @@ export default function MovieDetail() {
                 }
               });
 
-              setQualityOptions(mappedQualities);
-
-              if (mappedQualities.length > 0) {
+              if (isMounted && mappedQualities.length > 0) {
+                setQualityOptions(mappedQualities);
                 setResolvedStreamUrl(mappedQualities[0].url);
                 setRdStatus('ready');
                 setActiveServer('debrid');
@@ -149,32 +141,28 @@ export default function MovieDetail() {
               }
             }
           }
-
-          setRdStatus('failed');
-          setErrorMessage('لم يتم العثور على رابط Real-Debrid جاهز.');
-          setActiveServer('vidsrc_cc');
-
-        } catch (err) {
-          console.error("RD Fetch Error:", err);
-          setRdStatus('failed');
-          setErrorMessage('خطأ في الاتصال بالسيرفر.');
-          setActiveServer('vidsrc_cc');
         }
-      } else {
-        setRdStatus('failed');
-        setErrorMessage('تعذر جلب معرّف المحتوى.');
-        setActiveServer('vidsrc_cc');
+      } catch (err) {
+        console.error("Fetch Error:", err);
       }
-      setLoading(false);
+
+      if (isMounted) {
+        setRdStatus('failed');
+        setErrorMessage('تعذر العثور على رابط Real-Debrid مباشر.');
+        setActiveServer('vidsrc_cc');
+        setLoading(false);
+      }
     }
 
-    fetchAllData();
+    fetchStreamData();
+
+    return () => { isMounted = false; };
   }, [id, type, season, episode]);
 
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل المشغل المطور...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري التحقق وجلب رابط البث...</h3>
       </div>
     );
   }
@@ -244,7 +232,7 @@ export default function MovieDetail() {
         </div>
       )}
 
-      {/* قائمة اختيار الجودة المنسقة */}
+      {/* اختيار الجودة */}
       {activeServer === 'debrid' && qualityOptions.length > 0 && (
         <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px 18px', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 اختر الجودة:</span>
@@ -275,7 +263,7 @@ export default function MovieDetail() {
             border: '1px solid #333'
           }}
         >
-          💎 Real-Debrid الأصيل (بدون إعلانات 🛡️) {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
+          💎 Real-Debrid الأصيل {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
         </button>
         
         <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
@@ -288,9 +276,10 @@ export default function MovieDetail() {
         <div style={{ position: 'relative', width: '100%', minHeight: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {activeServer === 'debrid' && resolvedStreamUrl ? (
             <video 
+              key={resolvedStreamUrl}
               ref={videoRef}
               controls 
-              crossOrigin="anonymous"
+              autoPlay
               playsInline 
               style={{ width: '100%', height: '100%' }}
             >
