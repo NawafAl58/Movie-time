@@ -71,7 +71,17 @@ export default function MoviePlayer() {
     setStatusText('Unrestricting stream on Real-Debrid...');
 
     try {
-      const rawStreamLink = stream.url || stream.externalUrl;
+      // استخراج الرابط سواء كان URL جاهز أو Magnet Hash
+      let rawStreamLink = stream.url || stream.externalUrl;
+
+      if (!rawStreamLink && stream.infoHash) {
+        // تحويل الـ infoHash إلى Magnet Link يفهمه Real-Debrid
+        rawStreamLink = `magnet:?xt=urn:btih:${stream.infoHash}`;
+      }
+
+      if (!rawStreamLink) {
+        throw new Error('No valid URL or Magnet hash found for this stream.');
+      }
 
       const res = await fetch('/api/unrestrict', {
         method: 'POST',
@@ -81,7 +91,7 @@ export default function MoviePlayer() {
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error || 'Failed to unrestrict');
+      if (!res.ok) throw new Error(data.error || 'Failed to unrestrict link');
 
       setDownloadUrl(data.downloadUrl);
       setLoading(false);
