@@ -298,7 +298,7 @@ export default function MovieDetail() {
             border: '1px solid #333'
           }}
         >
-          💎 Real-Debrid الأصيل {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
+          💎 Premium {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
         </button>
         
         <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
