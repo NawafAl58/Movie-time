@@ -6,7 +6,7 @@ import Head from 'next/head';
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
-// 🔑 API Key الخاص بك
+// 🔑 API Key الخاص بك في Real-Debrid
 const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`;
 
@@ -17,26 +17,28 @@ export default function MoviePlayerPage() {
   const [mediaType, setMediaType] = useState(type === 'tv' ? 'tv' : 'movie');
   const [details, setDetails] = useState(null);
   const [imdbId, setImdbId] = useState(null);
+  
+  // المسلسلات
   const [seasons, setSeasons] = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [episodes, setEpisodes] = useState([]);
   const [selectedEpisode, setSelectedEpisode] = useState(1);
 
-  const [groupedQualityStreams, setGroupedQualityStreams] = useState({});
-  const [availableQualities, setAvailableQualities] = useState([]);
-  const [selectedQuality, setSelectedQuality] = useState('');
+  // السيرفرات والجودات
+  const [streams, setStreams] = useState([]);
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
+  const [activeQuality, setActiveQuality] = useState('');
   const [loadingStreams, setLoadingStreams] = useState(false);
 
-  const [arabicSubBlob, setArabicSubBlob] = useState('');
-  const [englishSubBlob, setEnglishSubBlob] = useState('');
-  const videoRef = useRef(null);
+  // الترجمات
+  const [arabicSub, setArabicSub] = useState('');
+  const [englishSub, setEnglishSub] = useState('');
 
   useEffect(() => {
     if (type) setMediaType(type === 'tv' ? 'tv' : 'movie');
   }, [type]);
 
-  // 1️⃣ جلب تفاصيل الفيلم/المسلسل
+  // 1️⃣ جلب بيانات TMDB لمعرفة الـ IMDb ID
   useEffect(() => {
     if (!id || mediaType === 'live') return;
 
@@ -62,7 +64,7 @@ export default function MoviePlayerPage() {
     fetchDetails();
   }, [id, mediaType]);
 
-  // 2️⃣ جلب حلقات المسلسلات
+  // 2️⃣ جلب حلقات المسلسل
   useEffect(() => {
     if (mediaType !== 'tv' || !id || !selectedSeason) return;
 
@@ -82,49 +84,13 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // دالة تحويل أي رابط إلى رابط تشغيل مباشر عبر Real-Debrid API (Unrestrict)
-  const resolveDirectStreamUrl = async (stream) => {
-    let rawUrl = stream.url || '';
-
-    // إذا كان الرابط جاهزاً ومباشراً
-    if (rawUrl.match(/\.(mp4|mkv|avi|mov)$/i)) {
-      return rawUrl;
-    }
-
-    // فك التشفير عن طريق Real-Debrid API للحصول على الرابط المباشر
-    try {
-      if (rawUrl) {
-        const formData = new FormData();
-        formData.append('link', rawUrl);
-
-        const rdRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${RD_API_KEY}`
-          },
-          body: formData
-        });
-
-        const rdData = await rdRes.json();
-        if (rdData && rdData.download) {
-          return rdData.download; // الرابط المباشر الحقيقي للشاشات والمشغل
-        }
-      }
-    } catch (e) {
-      console.error("Unrestrict Error:", e);
-    }
-
-    return rawUrl;
-  };
-
-  // 3️⃣ جلب السيرفرات وتصفيتها واختيار الرابط المباشر الشغال 100%
+  // 3️⃣ جلب السيرفرات زي ستريميو بالضبط (طريقة Torrentio Stream المباشرة)
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
     async function fetchRDStreams() {
       setLoadingStreams(true);
-      setGroupedQualityStreams({});
-      setAvailableQualities([]);
+      setStreams([]);
       setActiveStreamUrl('');
 
       let endpoint = mediaType === 'tv'
@@ -136,47 +102,18 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.streams && data.streams.length > 0) {
-          const qualityGroups = {};
+          // فلترة سريعة للروابط الجاهزة للتشغيل المباشر
+          const validStreams = data.streams.filter(s => s.url || s.externalUrl);
+          setStreams(validStreams);
 
-          data.streams.forEach(stream => {
-            const fullText = `${stream.name || ''} ${stream.title || ''}`.toLowerCase();
-
-            let quality = '720p';
-            if (fullText.includes('4k') || fullText.includes('2160p')) quality = '4K';
-            else if (fullText.includes('1440p') || fullText.includes('2k')) quality = '2K';
-            else if (fullText.includes('1080p')) quality = '1080p';
-            else if (fullText.includes('720p')) quality = '720p';
-            else if (fullText.includes('480p') || fullText.includes('360p')) quality = '480p';
-
-            const isDV = fullText.includes(' dv ') || fullText.includes('dolby vision');
-
-            if (!qualityGroups[quality]) {
-              qualityGroups[quality] = [];
-            }
-
-            if (!isDV) {
-              qualityGroups[quality].unshift(stream);
-            } else {
-              qualityGroups[quality].push(stream);
-            }
-          });
-
-          const qualitiesOrder = ['1080p', '4K', '2K', '720p', '480p'];
-          const existingQualities = qualitiesOrder.filter(q => qualityGroups[q] && qualityGroups[q].length > 0);
-
-          setGroupedQualityStreams(qualityGroups);
-          setAvailableQualities(existingQualities);
-
-          const defaultQuality = existingQualities[0];
-          if (defaultQuality) {
-            setSelectedQuality(defaultQuality);
-            const bestStream = qualityGroups[defaultQuality][0];
-            const directUrl = await resolveDirectStreamUrl(bestStream);
-            setActiveStreamUrl(directUrl);
+          if (validStreams.length > 0) {
+            const first = validStreams[0];
+            setActiveStreamUrl(first.url || first.externalUrl);
+            setActiveQuality(first.name || 'Auto');
           }
         }
       } catch (err) {
-        console.error("Error fetching streams:", err);
+        console.error("Error fetching RD streams:", err);
       }
       setLoadingStreams(false);
     }
@@ -184,11 +121,11 @@ export default function MoviePlayerPage() {
     fetchRDStreams();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب الترجمات المباشرة وتحويلها لـ Blob WebVTT
+  // 4️⃣ جلب ترجمة OpenSubtitles المباشرة
   useEffect(() => {
     if (!imdbId) return;
 
-    async function fetchAndConvertSubtitles() {
+    async function fetchSubtitles() {
       try {
         let subEndpoint = mediaType === 'tv'
           ? `https://opensubtitles-v3.strem.fun/subtitles/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`
@@ -198,55 +135,19 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.subtitles) {
-          const loadSubBlob = async (subObj, setBlobState) => {
-            if (!subObj || !subObj.url) {
-              setBlobState('');
-              return;
-            }
-            try {
-              const subRes = await fetch(subObj.url);
-              let text = await subRes.text();
+          const ar = data.subtitles.find(s => s.lang === 'ara' || s.lang === 'ar');
+          const en = data.subtitles.find(s => s.lang === 'eng' || s.lang === 'en');
 
-              if (!text.startsWith('WEBVTT')) {
-                text = 'WEBVTT\n\n' + text
-                  .replace(/(\d\d:\d\d:\d\d),(\d\d\d)/g, '$1.$2')
-                  .replace(/\{\\([a-zA-Z0-9]+)\}/g, '');
-              }
-
-              const blob = new Blob([text], { type: 'text/vtt;charset=utf-8' });
-              const blobUrl = URL.createObjectURL(blob);
-              setBlobState(blobUrl);
-            } catch (e) {
-              console.error("Failed to load subtitle content:", e);
-              setBlobState('');
-            }
-          };
-
-          const arSub = data.subtitles.find(s => s.lang === 'ara' || s.lang === 'ar');
-          const enSub = data.subtitles.find(s => s.lang === 'eng' || s.lang === 'en');
-
-          await loadSubBlob(arSub, setArabicSubBlob);
-          await loadSubBlob(enSub, setEnglishSubBlob);
+          setArabicSub(ar?.url || '');
+          setEnglishSub(en?.url || '');
         }
       } catch (err) {
-        console.error("Subtitles error:", err);
+        console.error("Subtitles fetch error:", err);
       }
     }
 
-    fetchAndConvertSubtitles();
+    fetchSubtitles();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
-
-  const handleQualityChange = async (quality) => {
-    setSelectedQuality(quality);
-    const streamsList = groupedQualityStreams[quality];
-    if (streamsList && streamsList.length > 0) {
-      setLoadingStreams(true);
-      const bestStream = streamsList[0];
-      const directUrl = await resolveDirectStreamUrl(bestStream);
-      setActiveStreamUrl(directUrl);
-      setLoadingStreams(false);
-    }
-  };
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px' }}>
@@ -254,7 +155,7 @@ export default function MoviePlayerPage() {
         <title>{details ? (details.title || details.name) : 'Player'} - CINEMA MATRIX</title>
       </Head>
 
-      {/* الهيدر وزر العودة */}
+      {/* الهيدر */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <button 
           onClick={() => router.back()} 
@@ -267,7 +168,7 @@ export default function MoviePlayerPage() {
         </h1>
       </div>
 
-      {/* مشغل الفيديو */}
+      {/* مشغل الفيديو زي ستريميو */}
       <div style={{ width: '100%', height: '68vh', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1c1c1c', position: 'relative', marginBottom: '20px' }}>
         {mediaType === 'live' ? (
           <iframe 
@@ -282,27 +183,25 @@ export default function MoviePlayerPage() {
             controls 
             autoPlay 
             playsInline 
-            crossOrigin="anonymous"
             style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
           >
             <source src={activeStreamUrl} type="video/mp4" />
             
-            {/* الترجمة العربية */}
-            {arabicSubBlob && (
+            {/* OpenSubtitles tracks */}
+            {arabicSub && (
               <track 
                 kind="subtitles" 
-                src={arabicSubBlob} 
+                src={arabicSub} 
                 srcLang="ar" 
                 label="العربية (Arabic)" 
                 default 
               />
             )}
 
-            {/* الترجمة الإنجليزية */}
-            {englishSubBlob && (
+            {englishSub && (
               <track 
                 kind="subtitles" 
-                src={englishSubBlob} 
+                src={englishSub} 
                 srcLang="en" 
                 label="English" 
               />
@@ -310,13 +209,23 @@ export default function MoviePlayerPage() {
             Your browser does not support HTML5 video.
           </video>
         ) : (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
-            {loadingStreams ? 'Resolving Direct Stream via Real-Debrid...' : 'No stream available.'}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888', gap: '15px' }}>
+            <div>{loadingStreams ? 'Loading Real-Debrid Streams...' : 'No Stream Loaded.'}</div>
+            {/* مشغل احتياطي إضافي يفتح فوراً في حال محاصرة المتصفح للروابط */}
+            {imdbId && (
+              <iframe 
+                src={mediaType === 'tv' 
+                  ? `https://vidsrc.to/embed/tv/${imdbId}/${selectedSeason}/${selectedEpisode}` 
+                  : `https://vidsrc.to/embed/movie/${imdbId}`}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                allowFullScreen
+              />
+            )}
           </div>
         )}
       </div>
 
-      {/* التحكم بالمواسم والحلقات للمسلسلات */}
+      {/* اختيار الموسم والحلقة */}
       {mediaType === 'tv' && seasons.length > 0 && (
         <div style={{ marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -355,32 +264,38 @@ export default function MoviePlayerPage() {
         </div>
       )}
 
-      {/* أزرار اختيار الجودة النظيفة */}
-      {mediaType !== 'live' && availableQualities.length > 0 && (
+      {/* قائمة سيرفرات Real-Debrid */}
+      {mediaType !== 'live' && streams.length > 0 && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#aaa' }}>
-            Select Quality (Direct Stream):
+            Real-Debrid Available Streams ({streams.length}):
           </h3>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            {availableQualities.map((quality) => {
-              const isSelected = selectedQuality === quality;
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {streams.map((s, idx) => {
+              const url = s.url || s.externalUrl;
+              const isSelected = activeStreamUrl === url;
+              const name = (s.name || '').replace('\n', ' ');
+              const title = (s.title || '').split('\n')[0];
+
               return (
                 <button
-                  key={quality}
-                  onClick={() => handleQualityChange(quality)}
+                  key={idx}
+                  onClick={() => {
+                    setActiveStreamUrl(url);
+                    setActiveQuality(name);
+                  }}
                   style={{
                     backgroundColor: isSelected ? '#e50914' : '#141414',
                     color: 'white',
-                    border: isSelected ? '1px solid #e50914' : '1px solid #333',
-                    padding: '10px 22px',
-                    borderRadius: '8px',
+                    border: '1px solid #333',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
                     cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    transition: '0.2s'
+                    fontSize: '12px',
+                    fontWeight: 'bold'
                   }}
                 >
-                  {quality} {isSelected && '✓'}
+                  {name} - {title.slice(0, 25)}
                 </button>
               );
             })}
