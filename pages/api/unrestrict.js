@@ -4,10 +4,18 @@ export default async function handler(req, res) {
   }
 
   const { link } = req.body;
-  const RD_API_KEY = process.env.NEXT_PUBLIC_REAL_DEBRID_API_KEY;
 
-  if (!link || !RD_API_KEY) {
-    return res.status(400).json({ error: 'Missing link or Real-Debrid API Key' });
+  // جلب المفتاح بأي صيغة تم حفظه بها في Vercel
+  const RD_API_KEY = 
+    process.env.NEXT_PUBLIC_REAL_DEBRID_API_KEY || 
+    process.env.REAL_DEBRID_API_KEY;
+
+  if (!link) {
+    return res.status(400).json({ error: 'Missing stream link' });
+  }
+
+  if (!RD_API_KEY) {
+    return res.status(400).json({ error: 'Real-Debrid API Key is not configured in Vercel environment variables' });
   }
 
   try {
