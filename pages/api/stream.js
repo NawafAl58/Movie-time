@@ -1,10 +1,4 @@
 // pages/api/stream.js
-export const config = {
-  api: {
-    responseLimit: false, // إلغاء قيود حجم البيانات لضمان استمرار بث الأفلام الطويلة
-  },
-};
-
 export default async function handler(req, res) {
   const { url } = req.query;
 
@@ -13,61 +7,29 @@ export default async function handler(req, res) {
   }
 
   try {
-    const decodedUrl = decodeURIComponent(url);
-
-    // جلب الـ IP الحقيقي الخاص بجهازك (العميل) لمنع حظر Real-Debrid
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-
-    // إرسال الطلب إلى Real-Debrid وكأننا المتصفح الخاص بك تماماً
-    const response = await fetch(decodedUrl, {
+    const response = await fetch(decodeURIComponent(url), {
       headers: {
-        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
-        'X-Forwarded-For': clientIp,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
       },
     });
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch stream from source' });
+      return res.status(response.status).send('Failed to fetch stream');
     }
 
-    // تمرير الهيدرز الأساسية للفيديو وحقن الـ CORS للسماح للمتصفح بالقراءة
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    // نقل الـ Headers الخاصة بالفيديو للمتصفح
     res.setHeader('Content-Type', response.headers.get('content-type') || 'video/mp4');
-    
-    const contentLength = response.headers.get('content-length');
-    if (contentLength) {
-      res.setHeader('Content-Length', contentLength);
+    if (response.headers.get('content-length')) {
+      res.setHeader('Content-Length', response.headers.get('content-length'));
     }
+    res.setHeader('Accept-Ranges', 'bytes');
 
-    const acceptRanges = response.headers.get('accept-ranges');
-    if (acceptRanges) {
-      res.setHeader('Accept-Ranges', acceptRanges);
-    }
-
-    // عمل Pipe للبث المباشر من سيرفر ديبريد إلى متصفحك مباشرة
-    if (response.body) {
-      const reader = response.body.getReader();
-      const stream = new ReadableStream({
-        async start(controller) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            controller.enqueue(value);
-          }
-          controller.close();
-        }
-      });
-
-      // تحويل الـ ReadableStream إلى Buffer وإرساله
-      const nodeStream = require('stream').Readable.from(stream);
-      nodeStream.pipe(res);
-    } else {
-      res.status(500).json({ error: 'No response body available' });
-    }
-
+    // تحويل الـ Stream مباشرة للمتصفح
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return res.send(buffer);
   } catch (error) {
-    console.error('Proxy Stream Error:', error);
-    res.status(500).json({ error: 'Internal server error during streaming' });
+    console.error('Proxy Error:', error);
+    return res.status(500).json({ error: 'Stream proxy failed' });
   }
 }
