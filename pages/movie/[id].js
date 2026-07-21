@@ -7,6 +7,81 @@ const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
+// 🛡️ مكون المشغل المعزول لمنع أخطاء DOM و removeChild Error
+function CustomPlayer({ url }) {
+  const videoRef = useRef(null);
+  const playerInstanceRef = useRef(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    // تحميل CSS الخاص بـ Plyr
+    if (!document.getElementById('plyr-css')) {
+      const link = document.createElement('link');
+      link.id = 'plyr-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.plyr.io/3.7.8/plyr.css';
+      document.head.appendChild(link);
+    }
+
+    const initPlyr = () => {
+      if (videoRef.current && window.Plyr && isMounted) {
+        try {
+          if (playerInstanceRef.current) {
+            playerInstanceRef.current.destroy();
+          }
+          playerInstanceRef.current = new window.Plyr(videoRef.current, {
+            controls: [
+              'play-large', 'play', 'progress', 'current-time', 
+              'duration', 'mute', 'volume', 'captions', 'settings', 
+              'pip', 'fullscreen'
+            ],
+            settings: ['captions', 'quality', 'speed']
+          });
+        } catch (e) {
+          console.warn("Plyr init safely handled:", e);
+        }
+      }
+    };
+
+    if (window.Plyr) {
+      initPlyr();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.plyr.io/3.7.8/plyr.polyfilled.js';
+      script.onload = initPlyr;
+      document.body.appendChild(script);
+    }
+
+    return () => {
+      isMounted = false;
+      if (playerInstanceRef.current) {
+        try {
+          playerInstanceRef.current.destroy();
+        } catch (e) {
+          // تجاهل أخطاء التدمير الحادثة في DOM
+        }
+        playerInstanceRef.current = null;
+      }
+    };
+  }, [url]);
+
+  return (
+    <div style={{ width: '100%', height: '100%' }}>
+      <video 
+        ref={videoRef}
+        key={url}
+        controls 
+        autoPlay
+        playsInline 
+        style={{ width: '100%', height: '100%' }}
+      >
+        <source src={url} />
+      </video>
+    </div>
+  );
+}
+
 export default function MovieDetail() {
   const router = useRouter();
   const { id, type } = router.query;
@@ -22,53 +97,7 @@ export default function MovieDetail() {
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
 
-  const videoRef = useRef(null);
-  const plyrInstance = useRef(null);
-
-  // تهيئة وربط مشغل Plyr مع معالجة الأخطاء
-  useEffect(() => {
-    if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
-      if (!document.getElementById('plyr-css')) {
-        const link = document.createElement('link');
-        link.id = 'plyr-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.plyr.io/3.7.8/plyr.css';
-        document.head.appendChild(link);
-      }
-
-      const initPlyr = () => {
-        if (window.Plyr && videoRef.current) {
-          if (plyrInstance.current) plyrInstance.current.destroy();
-          plyrInstance.current = new window.Plyr(videoRef.current, {
-            controls: [
-              'play-large', 'play', 'progress', 'current-time', 
-              'duration', 'mute', 'volume', 'captions', 'settings', 
-              'pip', 'fullscreen'
-            ],
-            settings: ['captions', 'quality', 'speed']
-          });
-        }
-      };
-
-      if (window.Plyr) {
-        initPlyr();
-      } else {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.plyr.io/3.7.8/plyr.polyfilled.js';
-        script.onload = initPlyr;
-        document.body.appendChild(script);
-      }
-    }
-
-    return () => {
-      if (plyrInstance.current) {
-        plyrInstance.current.destroy();
-        plyrInstance.current = null;
-      }
-    };
-  }, [resolvedStreamUrl, activeServer]);
-
-  // جلب البيانات معالجة أخطاء جلب البث
+  // جلب البيانات
   useEffect(() => {
     if (!id) return;
 
@@ -83,7 +112,6 @@ export default function MovieDetail() {
       const finalType = isTv ? 'tv' : 'movie';
 
       try {
-        // 1. جلب بيانات TMDB
         let res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
         let mData = null;
         if (res.ok) mData = await res.json();
@@ -275,16 +303,7 @@ export default function MovieDetail() {
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <div style={{ position: 'relative', width: '100%', minHeight: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {activeServer === 'debrid' && resolvedStreamUrl ? (
-            <video 
-              key={resolvedStreamUrl}
-              ref={videoRef}
-              controls 
-              autoPlay
-              playsInline 
-              style={{ width: '100%', height: '100%' }}
-            >
-              <source src={resolvedStreamUrl} />
-            </video>
+            <CustomPlayer url={resolvedStreamUrl} />
           ) : (
             <iframe 
               src={servers[activeServer]} 
