@@ -20,33 +20,59 @@ export default function MovieDetail() {
   const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
 
-  // التحكم في الموسم والحلقة للمسلسلات
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
 
   const videoRef = useRef(null);
+  const plyrInstance = useRef(null);
 
-  // تحميل مشغل Plyr
+  // تهيئة وربط مشغل Plyr فور توفر الرابط
   useEffect(() => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://cdn.plyr.io/3.7.8/plyr.css';
-    document.head.appendChild(link);
+    if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
+      // تحميل ملف الـ CSS الخاص بـ Plyr
+      if (!document.getElementById('plyr-css')) {
+        const link = document.createElement('link');
+        link.id = 'plyr-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.plyr.io/3.7.8/plyr.css';
+        document.head.appendChild(link);
+      }
 
-    const script = document.createElement('script');
-    script.src = 'https://cdn.plyr.io/3.7.8/plyr.polyfilled.js';
-    script.async = true;
-    script.onload = () => {
-      if (videoRef.current && window.Plyr) {
-        new window.Plyr(videoRef.current, {
-          controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen'],
-          settings: ['captions', 'quality', 'speed'],
-          captions: { active: true, update: true, language: 'ar' }
-        });
+      // تحميل مكتبة JS وتفعيلها
+      const initPlyr = () => {
+        if (window.Plyr) {
+          if (plyrInstance.current) {
+            plyrInstance.current.destroy();
+          }
+          plyrInstance.current = new window.Plyr(videoRef.current, {
+            controls: [
+              'play-large', 'play', 'progress', 'current-time', 
+              'duration', 'mute', 'volume', 'captions', 'settings', 
+              'pip', 'airplay', 'fullscreen'
+            ],
+            settings: ['captions', 'quality', 'speed'],
+            captions: { active: true, update: true, language: 'ar' }
+          });
+        }
+      };
+
+      if (window.Plyr) {
+        initPlyr();
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.plyr.io/3.7.8/plyr.polyfilled.js';
+        script.onload = initPlyr;
+        document.body.appendChild(script);
+      }
+    }
+
+    return () => {
+      if (plyrInstance.current) {
+        plyrInstance.current.destroy();
+        plyrInstance.current = null;
       }
     };
-    document.body.appendChild(script);
-  }, []);
+  }, [resolvedStreamUrl, activeServer]);
 
   useEffect(() => {
     if (!id) return;
@@ -92,17 +118,16 @@ export default function MovieDetail() {
             if (tData && tData.streams && tData.streams.length > 0) {
               const validStreams = tData.streams.filter(s => s.url && s.url.startsWith('http'));
 
-              // تجميع وتنظيف الروابط حسب الجودة فقط (4K, 2K, 1080p, 720p, SD)
               const mappedQualities = [];
               const seenLabels = new Set();
 
               const getQualityLabel = (stream) => {
-                const text = (stream.title + " " + stream.name).toLowerCase();
+                const text = ((stream.title || '') + " " + (stream.name || '')).toLowerCase();
                 if (text.includes('4k') || text.includes('2160p')) return '4K';
                 if (text.includes('1440p') || text.includes('2k')) return '2K (1440p)';
                 if (text.includes('1080p')) return '1080p';
                 if (text.includes('720p')) return '720p';
-                return 'أقل من 720p (SD)';
+                return 'SD (أقل من 720p)';
               };
 
               validStreams.forEach(stream => {
@@ -149,7 +174,7 @@ export default function MovieDetail() {
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل الفيديو بأفضل جودة...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل المشغل المطور...</h3>
       </div>
     );
   }
@@ -165,7 +190,6 @@ export default function MovieDetail() {
     vidsrc_cc: embedUrl,
     vidsrc_to: isTvShow ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}` : `https://vidsrc.to/embed/movie/${id}`,
     vidlink: isTvShow ? `https://vidlink.pro/embed/tv/${id}/${season}/${episode}` : `https://vidlink.pro/embed/movie/${id}`,
-    smashy: `https://embed.smashystream.com/playere.php?tmdb=${id}`
   };
 
   return (
@@ -185,7 +209,6 @@ export default function MovieDetail() {
             <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
             <p style={{ color: '#aaa', fontSize: '14px' }}>تاريخ الإصدار: {movieData.release_date || movieData.first_air_date} | ⭐ {movieData.vote_average?.toFixed(1)}</p>
             
-            {/* الحقوق باسم Anonymous */}
             <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderRight: '4px solid #e50914', fontSize: '13px', color: '#e50914', fontWeight: 'bold' }}>
               حقوق النشر والتشغيل محفوظة لـ: Anonymous
             </div>
@@ -221,14 +244,14 @@ export default function MovieDetail() {
         </div>
       )}
 
-      {/* قائمة اختيار الجودة المحددة والواضحة */}
+      {/* قائمة اختيار الجودة المنسقة */}
       {activeServer === 'debrid' && qualityOptions.length > 0 && (
-        <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px 18px', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px 18px', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 اختر الجودة:</span>
           <select 
             value={resolvedStreamUrl}
             onChange={(e) => setResolvedStreamUrl(e.target.value)}
-            style={{ padding: '8px 16px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ padding: '8px 16px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', outline: 'none' }}
           >
             {qualityOptions.map((q, idx) => (
               <option key={idx} value={q.url}>
@@ -262,18 +285,16 @@ export default function MovieDetail() {
 
       {/* منطقة المشغل الحاوية */}
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
-        <div style={{ position: 'relative', width: '100%', minHeight: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', width: '100%', minHeight: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {activeServer === 'debrid' && resolvedStreamUrl ? (
             <video 
               ref={videoRef}
               controls 
               crossOrigin="anonymous"
               playsInline 
-              key={resolvedStreamUrl}
               style={{ width: '100%', height: '100%' }}
             >
               <source src={resolvedStreamUrl} />
-              <track kind="captions" label="العربية" srcLang="ar" default />
             </video>
           ) : (
             <iframe 
