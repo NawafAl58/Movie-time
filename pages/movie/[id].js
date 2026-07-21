@@ -6,14 +6,17 @@ import Head from 'next/head';
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
-// 🔴 الـ API Token والـ Base URL الخاصين بـ Real-Debrid عبر Torrentio
-const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q'; // استبدل هذا بالتوكن الخاص بك من real-debrid.com/apitoken
-const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`;
+// 🔴 ضع الـ API Token الخاص بك هنا
+const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q'; 
+const TORRENTIO_BASE_URL = RD_API_KEY && RD_API_KEY !== 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q'
+  ? `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`
+  : 'https://torrentio.strem.fun';
 
 export default function MoviePlayerPage() {
   const router = useRouter();
-  const { id, type } = router.query;
+  const { id, type } = router.query; 
 
+  const [mediaType, setMediaType] = useState(type === 'tv' ? 'tv' : 'movie');
   const [details, setDetails] = useState(null);
   const [imdbId, setImdbId] = useState(null);
   const [seasons, setSeasons] = useState([]);
@@ -26,17 +29,20 @@ export default function MoviePlayerPage() {
   const [activeStreamIndex, setActiveStreamIndex] = useState(0);
   const [loadingStreams, setLoadingStreams] = useState(false);
 
-  // الترجمات العربية والإنجليزية
   const [arabicSubUrl, setArabicSubUrl] = useState('');
   const [englishSubUrl, setEnglishSubUrl] = useState('');
   const videoRef = useRef(null);
 
-  // 1️⃣ جلب تفاصيل المادة لمعرفة IMDb ID
+  // تحديث نوع الميديا المختار فوراً
   useEffect(() => {
-    if (!id || type === 'live') return;
+    if (type) setMediaType(type === 'tv' ? 'tv' : 'movie');
+  }, [type]);
+
+  // 1️⃣ جلب التفاصيل بحسب نوع الميديا المحدد
+  useEffect(() => {
+    if (!id || mediaType === 'live') return;
 
     async function fetchDetails() {
-      const mediaType = type === 'tv' ? 'tv' : 'movie';
       try {
         const res = await fetch(`${TMDB_BASE_URL}/${mediaType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`);
         const data = await res.json();
@@ -46,7 +52,9 @@ export default function MoviePlayerPage() {
         setImdbId(fetchedImdbId);
 
         if (mediaType === 'tv' && data.seasons) {
-          setSeasons(data.seasons.filter(s => s.season_number > 0));
+          const validSeasons = data.seasons.filter(s => s.season_number > 0);
+          setSeasons(validSeasons);
+          if (validSeasons.length > 0) setSelectedSeason(validSeasons[0].season_number);
         }
       } catch (err) {
         console.error("Error fetching media details:", err);
@@ -54,11 +62,11 @@ export default function MoviePlayerPage() {
     }
 
     fetchDetails();
-  }, [id, type]);
+  }, [id, mediaType]);
 
-  // 2️⃣ جلب حلقات الموسم للمسلسلات
+  // 2️⃣ جلب حلقات الموسم المختار
   useEffect(() => {
-    if (type !== 'tv' || !id || !selectedSeason) return;
+    if (mediaType !== 'tv' || !id || !selectedSeason) return;
 
     async function fetchEpisodes() {
       try {
@@ -74,11 +82,11 @@ export default function MoviePlayerPage() {
     }
 
     fetchEpisodes();
-  }, [id, type, selectedSeason]);
+  }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب روابط Real-Debrid مباشرة باستخدام الـ Base URL المربوط بالتوكن
+  // 3️⃣ جلب سيرفرات Real-Debrid
   useEffect(() => {
-    if (!imdbId && type !== 'live') return;
+    if (!imdbId && mediaType !== 'live') return;
 
     async function fetchRDStreams() {
       setLoadingStreams(true);
@@ -87,7 +95,7 @@ export default function MoviePlayerPage() {
       setActiveStreamIndex(0);
 
       let endpoint = '';
-      if (type === 'tv') {
+      if (mediaType === 'tv') {
         endpoint = `${TORRENTIO_BASE_URL}/stream/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`;
       } else {
         endpoint = `${TORRENTIO_BASE_URL}/stream/movie/${imdbId}.json`;
@@ -112,16 +120,16 @@ export default function MoviePlayerPage() {
     }
 
     fetchRDStreams();
-  }, [imdbId, type, selectedSeason, selectedEpisode]);
+  }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب الترجمات العربية والإنجليزية تلقائياً
+  // 4️⃣ جلب الترجمات المباشرة
   useEffect(() => {
     if (!imdbId) return;
 
     async function fetchSubtitles() {
       try {
         let subEndpoint = `https://opensubtitles-v3.strem.fun/subtitles/movie/${imdbId}.json`;
-        if (type === 'tv') {
+        if (mediaType === 'tv') {
           subEndpoint = `https://opensubtitles-v3.strem.fun/subtitles/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`;
         }
 
@@ -143,7 +151,7 @@ export default function MoviePlayerPage() {
     }
 
     fetchSubtitles();
-  }, [imdbId, type, selectedSeason, selectedEpisode]);
+  }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
   const handleSelectStream = (stream, index) => {
     setActiveStreamIndex(index);
@@ -170,9 +178,9 @@ export default function MoviePlayerPage() {
         </h1>
       </div>
 
-      {/* مشغل الفيديو الرئيسي */}
-      <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', marginBottom: '20px' }}>
-        {type === 'live' ? (
+      {/* مشغل الفيديو بدون خطوط بيضاء جانبية وإطار كامل */}
+      <div style={{ width: '100%', height: '68vh', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1c1c1c', position: 'relative', marginBottom: '20px' }}>
+        {mediaType === 'live' ? (
           <iframe 
             src="https://vidsrc.me/embed/tv" 
             style={{ width: '100%', height: '100%', border: 'none' }} 
@@ -185,11 +193,12 @@ export default function MoviePlayerPage() {
             controls 
             autoPlay 
             playsInline 
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            crossOrigin="anonymous"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', backgroundColor: '#000' }}
           >
             <source src={activeStreamUrl} type="video/mp4" />
             
-            {/* 🔴 مسار الترجمة العربية */}
+            {/* 🔴 مسارات الترجمة المصححة مع خيار التبديل */}
             {arabicSubUrl && (
               <track 
                 kind="subtitles" 
@@ -200,7 +209,6 @@ export default function MoviePlayerPage() {
               />
             )}
 
-            {/* 🔵 مسار الترجمة الإنجليزية */}
             {englishSubUrl && (
               <track 
                 kind="subtitles" 
@@ -219,7 +227,7 @@ export default function MoviePlayerPage() {
       </div>
 
       {/* التحكم بالمواسم والحلقات للمسلسلات */}
-      {type === 'tv' && seasons.length > 0 && (
+      {mediaType === 'tv' && seasons.length > 0 && (
         <div style={{ marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ fontWeight: 'bold', color: '#e50914' }}>Season:</label>
@@ -257,8 +265,8 @@ export default function MoviePlayerPage() {
         </div>
       )}
 
-      {/* اختيارات الجودة وسيرفرات Real-Debrid المتاحة */}
-      {type !== 'live' && (
+      {/* اختيارات الجودة وسيرفرات Real-Debrid */}
+      {mediaType !== 'live' && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#aaa' }}>
             Available Real-Debrid Servers:
