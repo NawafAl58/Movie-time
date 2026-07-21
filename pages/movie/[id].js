@@ -20,7 +20,7 @@ export default function MoviePlayerPage() {
   // السيرفرات والجودات
   const [streams, setStreams] = useState([]);
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
-  const [activeQuality, setActiveQuality] = useState('');
+  const [activeStreamIndex, setActiveStreamIndex] = useState(0);
   const [loadingStreams, setLoadingStreams] = useState(false);
 
   // الترجمات (عربي + إنجليزي)
@@ -73,7 +73,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, type, selectedSeason]);
 
-  // 3️⃣ جلب روابط Real-Debrid وتصفيتها لتفادي بطء الفريمات
+  // 3️⃣ جلب روابط Real-Debrid وتصفيتها من DV لعمل التشغيل المباشر
   useEffect(() => {
     if (!imdbId && type !== 'live') return;
 
@@ -81,6 +81,7 @@ export default function MoviePlayerPage() {
       setLoadingStreams(true);
       setStreams([]);
       setActiveStreamUrl('');
+      setActiveStreamIndex(0);
 
       let endpoint = '';
       if (type === 'tv') {
@@ -93,24 +94,34 @@ export default function MoviePlayerPage() {
         const res = await fetch(endpoint);
         const data = await res.json();
         if (data && data.streams && data.streams.length > 0) {
-          // ترتيب السيرفرات لتقديم H.264 لتشغيل سلس بدون تقطيع فريمات
-          const sortedStreams = [...data.streams].sort((a, b) => {
-            const titleA = (a.name + ' ' + (a.title || '')).toLowerCase();
-            const titleB = (b.name + ' ' + (b.title || '')).toLowerCase();
-            
-            const isHevcA = titleA.includes('hevc') || titleA.includes('h265') || titleA.includes('x265');
-            const isHevcB = titleB.includes('hevc') || titleB.includes('h265') || titleB.includes('x265');
+          
+          // 🔴 استبعاد صيغ Dolby Vision (DV) لأنها تسبب شاشة سوداء وترتيب الروابط الأنسب للمتصفح
+          const filteredStreams = data.streams.filter(s => {
+            const text = ((s.name || '') + ' ' + (s.title || '')).toLowerCase();
+            return !text.includes(' dv ') && !text.includes('dolby vision') && !text.includes('dovi');
+          });
 
-            if (isHevcA && !isHevcB) return 1;
-            if (!isHevcA && isHevcB) return -1;
+          const validStreams = filteredStreams.length > 0 ? filteredStreams : data.streams;
+
+          // ترتيب لتفضيل H.264 و 1080p
+          const sortedStreams = [...validStreams].sort((a, b) => {
+            const titleA = ((a.name || '') + ' ' + (a.title || '')).toLowerCase();
+            const titleB = ((b.name || '') + ' ' + (b.title || '')).toLowerCase();
+
+            const is1080A = titleA.includes('1080p');
+            const is1080B = titleB.includes('1080p');
+
+            if (is1080A && !is1080B) return -1;
+            if (!is1080A && is1080B) return 1;
             return 0;
           });
 
           setStreams(sortedStreams);
+          setActiveStreamIndex(0);
+
           const firstStream = sortedStreams[0];
           const url = firstStream.url || (firstStream.infoHash ? `https://torrentio.strem.fun/realdebrid/${firstStream.infoHash}` : '');
           setActiveStreamUrl(url);
-          setActiveQuality(firstStream.name || firstStream.title || 'Auto');
         }
       } catch (err) {
         console.error("Error fetching RD streams:", err);
@@ -136,21 +147,13 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.subtitles) {
-          // البحث عن الترجمة العربية
+          // الترجمة العربية
           const arabicSub = data.subtitles.find(s => s.lang === 'ara' || s.lang === 'ar');
-          if (arabicSub && arabicSub.url) {
-            setArabicSubUrl(arabicSub.url);
-          } else {
-            setArabicSubUrl('');
-          }
+          setArabicSubUrl(arabicSub?.url || '');
 
-          // البحث عن الترجمة الإنجليزية
+          // الترجمة الإنجليزية
           const englishSub = data.subtitles.find(s => s.lang === 'eng' || s.lang === 'en');
-          if (englishSub && englishSub.url) {
-            setEnglishSubUrl(englishSub.url);
-          } else {
-            setEnglishSubUrl('');
-          }
+          setEnglishSubUrl(englishSub?.url || '');
         }
       } catch (err) {
         console.error("Subtitles fetch error:", err);
@@ -162,10 +165,10 @@ export default function MoviePlayerPage() {
     fetchSubtitles();
   }, [imdbId, type, selectedSeason, selectedEpisode]);
 
-  const handleSelectStream = (stream) => {
+  const handleSelectStream = (stream, index) => {
+    setActiveStreamIndex(index);
     const url = stream.url || (stream.infoHash ? `https://torrentio.strem.fun/realdebrid/${stream.infoHash}` : '');
     setActiveStreamUrl(url);
-    setActiveQuality(stream.name || stream.title || 'Selected');
   };
 
   return (
@@ -230,7 +233,7 @@ export default function MoviePlayerPage() {
           </video>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
-            {loadingStreams ? 'Loading Streams & Subtitles...' : 'No stream available. Select a quality below.'}
+            {loadingStreams ? 'Loading Compatible Real-Debrid Streams...' : 'No stream available. Select a quality below.'}
           </div>
         )}
       </div>
@@ -282,13 +285,17 @@ export default function MoviePlayerPage() {
           </h3>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {streams.map((stream, idx) => {
-              const qualityLabel = stream.name || stream.title || `Server ${idx + 1}`;
-              const isSelected = activeQuality === qualityLabel;
+              const isSelected = activeStreamIndex === idx;
+              
+              // استخراج حجم الملف من العنوان إن وجد
+              const sizeMatch = stream.title ? stream.title.match(/💾\s*([\d\.]+\s*[G|M]B)/i) : null;
+              const size = sizeMatch ? `(${sizeMatch[1]})` : '';
+              const cleanName = (stream.name || 'Server').replace('\n', ' ');
 
               return (
                 <button
                   key={idx}
-                  onClick={() => handleSelectStream(stream)}
+                  onClick={() => handleSelectStream(stream, idx)}
                   style={{
                     backgroundColor: isSelected ? '#e50914' : '#141414',
                     color: 'white',
@@ -300,7 +307,7 @@ export default function MoviePlayerPage() {
                     fontWeight: 'bold'
                   }}
                 >
-                  {qualityLabel}
+                  {cleanName} {size}
                 </button>
               );
             })}
