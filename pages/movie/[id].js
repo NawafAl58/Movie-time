@@ -1,9 +1,9 @@
-// pages/movie/[id].js
+// pages/movie/[id].js أو pages/[id].js
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import Navbar from '../../components/Navbar';
-import { supabase } from '../../lib/supabaseClient';
+import Navbar from '@/components/Navbar';
+import { supabase } from '@/lib/supabaseClient';
 
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY || 'fe4b6ec1a6183fddf681565506956216'; 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -22,7 +22,6 @@ export default function MovieDetail() {
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
 
-  // المتغيرات الخاصة بالمسلسلات (افتراضياً الموسم 1 الحلقة 1)
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
 
@@ -63,7 +62,6 @@ export default function MovieDetail() {
         try {
           const queryTarget = finalType === 'tv' ? `${imdbId}:${season}:${episode}` : imdbId;
 
-          // 1. طلب Torrentio المباشر مع Real-Debrid
           const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${queryTarget}.json`;
           const tRes = await fetch(torrentioUrl);
           
@@ -85,7 +83,6 @@ export default function MovieDetail() {
             }
           }
 
-          // 2. المحاولة الاحتياطية
           const fbRes = await fetch(`https://torrentio.strem.fun/stream/${finalType}/${queryTarget}.json`);
           if (fbRes.ok) {
             const fbData = await fbRes.json();
@@ -173,7 +170,6 @@ export default function MovieDetail() {
     }
   }, [activeServer, resolvedStreamUrl]);
 
-  // دالة الإضافة للمفضلة وقوائم المشاهدة في Supabase
   const saveToLibrary = async (listType) => {
     setActionMsg('');
     const { data: { user } } = await supabase.auth.getUser();
@@ -232,7 +228,6 @@ export default function MovieDetail() {
         <title>{displayTitle} - CINEMATRIX</title>
       </Head>
 
-      {/* Navbar الموحد */}
       <Navbar />
 
       <div style={{ padding: '20px' }}>
@@ -247,7 +242,6 @@ export default function MovieDetail() {
               <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
               <p style={{ color: '#aaa', fontSize: '14px' }}>تاريخ الإصدار: {movieData.release_date || movieData.first_air_date} | ⭐ {movieData.vote_average?.toFixed(1)}</p>
 
-              {/* أزرار الإضافة للمفضلة وقوائم المشاهدة */}
               <div style={{ display: 'flex', gap: '12px', margin: '15px 0', flexWrap: 'wrap' }}>
                 <button
                   onClick={() => saveToLibrary('favorites')}
@@ -274,7 +268,6 @@ export default function MovieDetail() {
           </div>
         )}
 
-        {/* خيارات المواسم والحلقات عند اختيار مسلسل */}
         {isTvShow && (
           <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -300,7 +293,6 @@ export default function MovieDetail() {
           </div>
         )}
 
-        {/* أزرار السيرفرات */}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
           <button 
             onClick={() => setActiveServer('debrid')}
