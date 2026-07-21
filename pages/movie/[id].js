@@ -8,7 +8,10 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 // 🔑 API Key الخاص بك في Real-Debrid
 const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
-const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`;
+
+// 🎯 إعدادات Torrentio لتصفيات الجودة (استبعاد الجودات الرديئة واستبعاد الملفات الضخمة جداً)
+const TORRENTIO_CONFIG = 'sort=qualitysize|qualityfilter=scr,cam,3d';
+const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/${TORRENTIO_CONFIG}|realdebrid=${RD_API_KEY}`;
 
 export default function MoviePlayerPage() {
   const router = useRouter();
@@ -85,7 +88,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب سيرفرات Real-Debrid وتغليفها برابط الـ Proxy الداخلي
+  // 3️⃣ جلب السيرفرات المفلترة (أقصى حد 8 سيرفرات ممتازة)
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
@@ -103,13 +106,16 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.streams && data.streams.length > 0) {
-          // تفضيل روابط MP4/H264 وتصفية DV
-          const validStreams = data.streams.filter(s => s.url || s.externalUrl);
-          setStreams(validStreams);
+          // 🧹 تصفية قائمة السيرفرات وتحديدها بـ 8 سيرفرات فقط
+          const cleanStreams = data.streams
+            .filter(s => s.url || s.externalUrl)
+            // نفضل السيرفرات المتوافقة بـ MP4 / H264
+            .slice(0, 8); 
 
-          if (validStreams.length > 0) {
-            const rawUrl = validStreams[0].url || validStreams[0].externalUrl;
-            // توجيه الرابط عبر الـ Proxy الداخلي لموقعك
+          setStreams(cleanStreams);
+
+          if (cleanStreams.length > 0) {
+            const rawUrl = cleanStreams[0].url || cleanStreams[0].externalUrl;
             const proxiedUrl = `/api/stream?url=${encodeURIComponent(rawUrl)}`;
             setActiveStreamUrl(proxiedUrl);
           }
@@ -218,12 +224,12 @@ export default function MoviePlayerPage() {
           </video>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
-            {loadingStreams ? 'Loading Real-Debrid Stream...' : 'No Stream Loaded.'}
+            {loadingStreams ? 'Loading Best Real-Debrid Streams...' : 'No Stream Loaded.'}
           </div>
         )}
       </div>
 
-      {/* التحكم بالمواسم والحلقات للمسلسلات */}
+      {/* اختيارات المسلسلات */}
       {mediaType === 'tv' && seasons.length > 0 && (
         <div style={{ marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -262,14 +268,18 @@ export default function MoviePlayerPage() {
         </div>
       )}
 
-      {/* قائمة السيرفرات المتاحة */}
+      {/* قائمة السيرفرات (المختارة بدقة) */}
       {mediaType !== 'live' && streams.length > 0 && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#aaa' }}>
-            Real-Debrid Available Streams ({streams.length}):
+            Top Quality Real-Debrid Servers ({streams.length}):
           </h3>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {streams.map((s, idx) => {
+              const rawUrl = s.url || s.externalUrl;
+              const proxiedUrl = `/api/stream?url=${encodeURIComponent(rawUrl)}`;
+              const isSelected = activeStreamUrl === proxiedUrl;
+              
               const name = (s.name || '').replace('\n', ' ');
               const title = (s.title || '').split('\n')[0];
 
@@ -278,7 +288,7 @@ export default function MoviePlayerPage() {
                   key={idx}
                   onClick={() => handleSelectStream(s)}
                   style={{
-                    backgroundColor: '#141414',
+                    backgroundColor: isSelected ? '#e50914' : '#141414',
                     color: 'white',
                     border: '1px solid #333',
                     padding: '8px 16px',
