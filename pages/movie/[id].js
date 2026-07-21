@@ -14,16 +14,39 @@ export default function MovieDetail() {
   
   const [movieData, setMovieData] = useState(null);
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
+  const [availableStreams, setAvailableStreams] = useState([]);
   const [rdStatus, setRdStatus] = useState('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
 
-  // المتغيرات الخاصة بالمسلسلات (افتراضياً الموسم 1 الحلقة 1)
+  // التحكم في الموسم والحلقة للمسلسلات
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
 
   const videoRef = useRef(null);
+
+  // تحميل مكتبة Plyr ديناميكياً للتحكم بالترجمة والجودة
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.plyr.io/3.7.8/plyr.css';
+    document.head.appendChild(link);
+
+    const script = document.createElement('script');
+    script.src = 'https://cdn.plyr.io/3.7.8/plyr.polyfilled.js';
+    script.async = true;
+    script.onload = () => {
+      if (videoRef.current && window.Plyr) {
+        new window.Plyr(videoRef.current, {
+          controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen'],
+          settings: ['captions', 'quality', 'speed'],
+          captions: { active: true, update: true, language: 'ar' }
+        });
+      }
+    };
+    document.body.appendChild(script);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -58,10 +81,9 @@ export default function MovieDetail() {
 
       if (mData && imdbId) {
         try {
-          // بناء صيغة الاستعلام: إذا كان مسلسلاً نطلب الموسم والحلقة
           const queryTarget = finalType === 'tv' ? `${imdbId}:${season}:${episode}` : imdbId;
 
-          // 1. طلب Torrentio المباشر مع Real-Debrid
+          // طلب Torrentio المباشر مع Real-Debrid
           const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${queryTarget}.json`;
           const tRes = await fetch(torrentioUrl);
           
@@ -69,12 +91,18 @@ export default function MovieDetail() {
             const tData = await tRes.json();
             
             if (tData && tData.streams && tData.streams.length > 0) {
-              const compatibleStream = tData.streams.find(s => 
-                s.url && (s.url.includes('.mp4') || s.name?.includes('x264') || s.title?.includes('x264'))
-              ) || tData.streams.find(s => s.url && s.url.startsWith('http'));
+              const validStreams = tData.streams.filter(s => s.url && s.url.startsWith('http'));
+              setAvailableStreams(validStreams);
 
-              if (compatibleStream && compatibleStream.url) {
-                setResolvedStreamUrl(compatibleStream.url);
+              // اختيار أعلى جودة سريعة افتراضياً
+              const bestStream = 
+                validStreams.find(s => s.title?.includes('4K') || s.name?.includes('4K') || s.title?.includes('2160p')) ||
+                validStreams.find(s => (s.title?.includes('1080p') || s.name?.includes('1080p')) && (s.title?.includes('x264') || s.name?.includes('x264'))) ||
+                validStreams.find(s => s.title?.includes('1080p') || s.name?.includes('1080p')) ||
+                validStreams[0];
+
+              if (bestStream && bestStream.url) {
+                setResolvedStreamUrl(bestStream.url);
                 setRdStatus('ready');
                 setActiveServer('debrid');
                 setLoading(false);
@@ -83,69 +111,8 @@ export default function MovieDetail() {
             }
           }
 
-          // 2. المحاولة الاحتياطية
-          const fbRes = await fetch(`https://torrentio.strem.fun/stream/${finalType}/${queryTarget}.json`);
-          if (fbRes.ok) {
-            const fbData = await fbRes.json();
-            if (fbData && fbData.streams && fbData.streams.length > 0) {
-              const firstHash = fbData.streams.find(s => s.infoHash)?.infoHash;
-              
-              if (firstHash) {
-                const formData = new URLSearchParams();
-                formData.append('magnet', `magnet:?xt=urn:btih:${firstHash}`);
-
-                const addRes = await fetch(`${RD_API_BASE}/torrents/addMagnet`, {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-                  body: formData
-                });
-
-                if (addRes.ok) {
-                  const addData = await addRes.json();
-                  const selectData = new URLSearchParams();
-                  selectData.append('files', 'all');
-
-                  await fetch(`${RD_API_BASE}/torrents/selectFiles/${addData.id}`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-                    body: selectData
-                  });
-
-                  const infoRes = await fetch(`${RD_API_BASE}/torrents/info/${addData.id}`, {
-                    headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` }
-                  });
-
-                  if (infoRes.ok) {
-                    const infoData = await infoRes.json();
-                    if (infoData.links && infoData.links.length > 0) {
-                      const unrestrictData = new URLSearchParams();
-                      unrestrictData.append('link', infoData.links[0]);
-
-                      const unRes = await fetch(`${RD_API_BASE}/unrestrict/link`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${DEBRID_API_TOKEN}` },
-                        body: unrestrictData
-                      });
-
-                      if (unRes.ok) {
-                        const unData = await unRes.json();
-                        if (unData.download) {
-                          setResolvedStreamUrl(unData.download);
-                          setRdStatus('ready');
-                          setActiveServer('debrid');
-                          setLoading(false);
-                          return;
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
           setRdStatus('failed');
-          setErrorMessage('لم يتم العثور على كاش جاهز لهذه الحلقة.');
+          setErrorMessage('لم يتم العثور على رابط Real-Debrid جاهز.');
           setActiveServer('vidsrc_cc');
 
         } catch (err) {
@@ -165,23 +132,16 @@ export default function MovieDetail() {
     fetchAllData();
   }, [id, type, season, episode]);
 
-  useEffect(() => {
-    if (activeServer === 'debrid' && resolvedStreamUrl && videoRef.current) {
-      videoRef.current.load();
-    }
-  }, [activeServer, resolvedStreamUrl]);
-
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري جلب البث المباشر...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل المشغل المطور...</h3>
       </div>
     );
   }
 
   const isTvShow = (type === 'tv' || movieData?.media_type_fixed === 'tv');
-  const mediaTypeFixed = isTvShow ? 'tv' : 'movie';
-  const displayTitle = movieData ? (movieData.title || movieData.name) : 'بث مباشر 📺';
+  const displayTitle = movieData ? (movieData.title || movieData.name) : 'عرض مباشر 📺';
 
   const embedUrl = isTvShow 
     ? `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`
@@ -196,6 +156,10 @@ export default function MovieDetail() {
 
   return (
     <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
+      <Head>
+        <title>{displayTitle} - SimplStream</title>
+      </Head>
+
       <button onClick={() => router.push('/')} style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}>
         ← العودة للرئيسية
       </button>
@@ -214,33 +178,50 @@ export default function MovieDetail() {
         </div>
       )}
 
-      {/* خيارات المواسم والحلقات عند اختيار مسلسل */}
+      {/* اختيار الموسم والحلقة عند تشغيل مسلسل */}
       {isTvShow && (
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222', alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
             الموسم:
             <input 
               type="number" 
               min="1" 
               value={season} 
-              onChange={(e) => setSeason(Number(e.target.value))} 
-              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px' }}
+              onChange={(e) => setSeason(Math.max(1, Number(e.target.value)))} 
+              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px', textAlign: 'center' }}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
             الحلقة:
             <input 
               type="number" 
               min="1" 
               value={episode} 
-              onChange={(e) => setEpisode(Number(e.target.value))} 
-              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px' }}
+              onChange={(e) => setEpisode(Math.max(1, Number(e.target.value)))} 
+              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px', textAlign: 'center' }}
             />
           </label>
         </div>
       )}
 
-      {/* أزرار السيرفرات */}
+      {/* خيارات تغيير الجودة والسيرفرات من Real-Debrid */}
+      {activeServer === 'debrid' && availableStreams.length > 1 && (
+        <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
+          <span style={{ fontWeight: 'bold', marginLeft: '10px', color: '#e50914' }}>🎥 اختر الجودة / المصدر المفضل:</span>
+          <select 
+            onChange={(e) => setResolvedStreamUrl(e.target.value)}
+            style={{ padding: '8px 12px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer' }}
+          >
+            {availableStreams.map((st, idx) => (
+              <option key={idx} value={st.url}>
+                {st.title ? st.title.split('\n')[0] : `سيرفر Real-Debrid ${idx + 1}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* أزرار اختيار السيرفر */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
         <button 
           onClick={() => setActiveServer('debrid')}
@@ -253,31 +234,34 @@ export default function MovieDetail() {
             border: '1px solid #333'
           }}
         >
-          💎 Real-Debrid الأصيل (بدون إعلانات 🛡️) {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
+          💎 Real-Debrid الأصيل (مشغل Plyr المطور 🛡️) {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
         </button>
         
         <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
         <button onClick={() => setActiveServer('vidsrc_to')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_to' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 2</button>
         <button onClick={() => setActiveServer('vidlink')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidlink' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 3</button>
-        <button onClick={() => setActiveServer('smashy')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'smashy' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 4</button>
       </div>
 
-      <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '12px', border: '2px solid #e50914' }}>
-        <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+      {/* منطقة المشغل الحاوية */}
+      <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
+        <div style={{ position: 'relative', width: '100%', minHeight: '65vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {activeServer === 'debrid' && resolvedStreamUrl ? (
             <video 
               ref={videoRef}
               controls 
-              autoPlay 
+              crossOrigin="anonymous"
               playsInline 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              key={resolvedStreamUrl}
+              style={{ width: '100%', height: '100%' }}
             >
               <source src={resolvedStreamUrl} />
+              {/* تفعيل مسار الترجمات في المشغل */}
+              <track kind="captions" label="العربية" srcLang="ar" default />
             </video>
           ) : (
             <iframe 
               src={servers[activeServer]} 
-              style={{ width: '100%', height: '100%', border: 'none' }} 
+              style={{ width: '100%', height: '65vh', border: 'none' }} 
               allowFullScreen 
               allow="autoplay; encrypted-media; picture-in-picture"
             />
