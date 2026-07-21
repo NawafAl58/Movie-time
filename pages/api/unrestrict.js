@@ -1,4 +1,3 @@
-// رفع مهلة التنفيذ لـ Vercel للتعامل مع الـ Magnets بدون انقطاع
 export const config = {
   maxDuration: 60,
 };
@@ -19,7 +18,7 @@ export default async function handler(req, res) {
     }
 
     if (!RD_API_KEY) {
-      return res.status(400).json({ error: 'REAL_DEBRID_API_KEY is not set in Vercel Environment Variables.' });
+      return res.status(400).json({ error: 'REAL_DEBRID_API_KEY is not set.' });
     }
 
     const authHeaders = {
@@ -27,7 +26,7 @@ export default async function handler(req, res) {
       'Content-Type': 'application/x-www-form-urlencoded',
     };
 
-    // A. Magnet Links Handling
+    // A. Magnet Links
     if (typeof link === 'string' && link.startsWith('magnet:')) {
       const addRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
         method: 'POST',
@@ -38,16 +37,12 @@ export default async function handler(req, res) {
       const addData = await addRes.json().catch(() => ({}));
 
       if (!addRes.ok) {
-        return res.status(400).json({ 
-          error: addData.error === 'infringing_file' 
-            ? 'This file is blocked by DMCA.' 
-            : (addData.error || 'Failed to add magnet.') 
-        });
+        return res.status(400).json({ error: addData.error || 'Failed to add magnet.' });
       }
 
       const torrentId = addData.id;
 
-      // Select files
+      // Select all files
       await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
         method: 'POST',
         headers: authHeaders,
@@ -61,26 +56,42 @@ export default async function handler(req, res) {
 
       const infoData = await infoRes.json().catch(() => ({}));
 
-      if (infoData.links && infoData.links.length > 0) {
-        const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
-          method: 'POST',
-          headers: authHeaders,
-          body: new URLSearchParams({ link: infoData.links[0] }).toString(),
-        });
+      if (infoData.files && infoData.files.length > 0) {
+        // البحث عن أكبر ملف فيديو داخل التورنت (لتجنب ملفات العينات Sample أو الملفات الملحقة)
+        const videoFiles = infoData.files.filter(f => 
+          f.path.match(/\.(mp4|mkv|avi|mov)$/i)
+        );
+        
+        // فرز الملفات حسب الحجم تنازلياً
+        videoFiles.sort((a, b) => b.bytes - a.bytes);
 
-        const finalData = await unrestrictRes.json().catch(() => ({}));
+        const targetFile = videoFiles[0] || infoData.files[0];
+        
+        // البحث عن الرابط المقابل للملف المطلوب
+        const fileIndex = infoData.files.findIndex(f => f.id === targetFile.id);
+        const targetLink = infoData.links[fileIndex] || infoData.links[0];
 
-        if (!unrestrictRes.ok) {
-          return res.status(400).json({ error: finalData.error || 'Failed to unrestrict generated link.' });
+        if (targetLink) {
+          const unrestrictRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+            method: 'POST',
+            headers: authHeaders,
+            body: new URLSearchParams({ link: targetLink }).toString(),
+          });
+
+          const finalData = await unrestrictRes.json().catch(() => ({}));
+
+          if (!unrestrictRes.ok) {
+            return res.status(400).json({ error: finalData.error || 'Failed to unrestrict link.' });
+          }
+
+          return res.status(200).json({ downloadUrl: finalData.download });
         }
-
-        return res.status(200).json({ downloadUrl: finalData.download });
-      } else {
-        return res.status(400).json({ error: 'Torrent is still downloading/caching on Real-Debrid.' });
       }
+
+      return res.status(400).json({ error: 'No streamable video files found in torrent.' });
     } 
     
-    // B. Direct Links Handling
+    // B. Direct Links
     else {
       const rdRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
         method: 'POST',
@@ -91,18 +102,14 @@ export default async function handler(req, res) {
       const data = await rdRes.json().catch(() => ({}));
 
       if (!rdRes.ok) {
-        return res.status(400).json({ 
-          error: data.error === 'infringing_file' 
-            ? 'This file is blocked by DMCA.' 
-            : (data.error || 'Failed to unrestrict link.') 
-        });
+        return res.status(400).json({ error: data.error || 'Failed to unrestrict link.' });
       }
 
       return res.status(200).json({ downloadUrl: data.download });
     }
 
   } catch (err) {
-    console.error('Unhandled API Error:', err);
-    return res.status(500).json({ error: err.message || 'Server Internal Error' });
+    console.error('API Error:', err);
+    return res.status(500).json({ error: err.message || 'Internal Server Error' });
   }
 }
