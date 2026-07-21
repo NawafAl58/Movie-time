@@ -21,7 +21,7 @@ export default function MoviePlayer() {
   const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
   const RD_API_KEY = process.env.NEXT_PUBLIC_REAL_DEBRID_API_KEY;
 
-  // 1. Fetch movie details in English (en-US)
+  // 1. Fetch Movie Details (En-US)
   useEffect(() => {
     if (!id) return;
 
@@ -44,11 +44,13 @@ export default function MoviePlayer() {
     fetchMovieDetails();
   }, [id]);
 
-  // 2. Fetch Torrentio streams
+  // 2. Fetch Torrentio Streams (Filtered for better compatibility)
   async function fetchStreams(imdbId) {
     try {
       setStatusText('Fetching available servers...');
-      const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}/stream/movie/${imdbId}.json`;
+      // Filter out heavy formats to get web-compatible streams first
+      const TORRENTIO_CONFIG = 'qualityfilter=scr,cam,3d';
+      const torrentioUrl = `https://torrentio.strem.fun/${TORRENTIO_CONFIG}|realdebrid=${RD_API_KEY}/stream/movie/${imdbId}.json`;
 
       const res = await fetch(torrentioUrl);
       const data = await res.json();
@@ -67,7 +69,7 @@ export default function MoviePlayer() {
     }
   }
 
-  // 3. Process Stream Link Client-Side
+  // 3. Process Stream with Real-Debrid Transcode / Direct Fallback
   async function handleSelectStream(stream) {
     setSelectedStream(stream);
     setLoading(true);
@@ -76,24 +78,52 @@ export default function MoviePlayer() {
     try {
       const rawStreamLink = stream.url || stream.externalUrl;
 
-      // Request Direct Download link from Real-Debrid
+      // 3.1 Unrestrict Raw Link
       const targetApi = encodeURIComponent('https://api.real-debrid.com/rest/1.0/unrestrict/link');
       const formData = new FormData();
       formData.append('link', rawStreamLink);
 
       const unrestrictRes = await fetch(`https://corsproxy.io/?${targetApi}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RD_API_KEY}`
-        },
+        headers: { 'Authorization': `Bearer ${RD_API_KEY}` },
         body: formData
       });
 
-      if (!unrestrictRes.ok) throw new Error(`Real-Debrid error: ${unrestrictRes.status}`);
+      if (!unrestrictRes.ok) throw new Error(`Real-Debrid Unrestrict Error: ${unrestrictRes.status}`);
 
       const rdData = await unrestrictRes.json();
+      const fileId = rdData.id;
       const directLink = rdData.download;
 
+      // 3.2 Try to Fetch H.264 Transcoded Streaming Endpoint (Fixes Black Screen)
+      try {
+        setStatusText('Preparing web-compatible video stream...');
+        const transcodeApi = encodeURIComponent(`https://api.real-debrid.com/rest/1.0/streaming/transcode/${fileId}`);
+        const transRes = await fetch(`https://corsproxy.io/?${transcodeApi}`, {
+          headers: { 'Authorization': `Bearer ${RD_API_KEY}` }
+        });
+
+        if (transRes.ok) {
+          const transData = await transRes.json();
+          // Pick H.264 compatible live MP4 stream
+          const webPlayableUrl = 
+            transData.fullHD?.liveMP4 || 
+            transData.hd?.liveMP4 || 
+            transData.apple?.fullHD || 
+            transData.liveMP4;
+
+          if (webPlayableUrl) {
+            setActiveUrl(webPlayableUrl);
+            setIsHls(webPlayableUrl.includes('.m3u8'));
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (transcodeErr) {
+        console.warn('Transcode unavailable, falling back to direct link:', transcodeErr);
+      }
+
+      // 3.3 Fallback to direct link
       setActiveUrl(directLink);
       setIsHls(directLink.endsWith('.m3u8'));
       setLoading(false);
@@ -105,7 +135,7 @@ export default function MoviePlayer() {
     }
   }
 
-  // 4. Video Player Setup
+  // 4. Attach Player & Handle HLS
   useEffect(() => {
     if (!activeUrl || !videoRef.current) return;
 
@@ -159,12 +189,12 @@ export default function MoviePlayer() {
           </h1>
         </div>
 
-        {/* Video Frame */}
+        {/* Video Player */}
         <div style={{ width: '100%', height: '560px', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', border: '1px solid #222' }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: '#888' }}>
-              <div style={{ fontSize: '18px', marginBottom: '8px' }}>⏳</div>
-              <p style={{ margin: 0 }}>{statusText}</p>
+              <div style={{ fontSize: '20px', marginBottom: '8px' }}>⏳</div>
+              <p style={{ margin: 0, fontSize: '14px' }}>{statusText}</p>
             </div>
           ) : (
             <video
@@ -177,7 +207,7 @@ export default function MoviePlayer() {
           )}
         </div>
 
-        {/* Servers Section */}
+        {/* Server Selection */}
         <div style={{ marginTop: '30px' }}>
           <h3 style={{ fontSize: '16px', color: '#ccc', marginBottom: '15px' }}>
             Available Servers ({streams.length}):
@@ -201,8 +231,7 @@ export default function MoviePlayer() {
                     maxWidth: '280px',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    transition: 'all 0.2s ease'
+                    textOverflow: 'ellipsis'
                   }}
                 >
                   {title.split('\n')[0]}
