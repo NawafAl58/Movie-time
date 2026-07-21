@@ -7,7 +7,7 @@ const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 // 🔴 ضع الـ API Token الخاص بك هنا
-const RD_API_KEY = 'YOUR_REAL_DEBRID_API_KEY';
+const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 const TORRENTIO_BASE_URL = RD_API_KEY && RD_API_KEY !== 'YOUR_REAL_DEBRID_API_KEY'
   ? `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`
   : 'https://torrentio.strem.fun';
