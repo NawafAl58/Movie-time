@@ -11,6 +11,7 @@ export default function MoviePlayer() {
   const [streams, setStreams] = useState([]);
   const [selectedStream, setSelectedStream] = useState(null);
   const [videoSrc, setVideoSrc] = useState('');
+  const [subtitleSrc, setSubtitleSrc] = useState('');
   const [loading, setLoading] = useState(true);
   const [statusText, setStatusText] = useState('Loading movie...');
 
@@ -19,7 +20,7 @@ export default function MoviePlayer() {
 
   const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
 
-  // 1. Fetch Movie Info from TMDB
+  // 1. Fetch Movie Info & Subtitles
   useEffect(() => {
     if (!id) return;
 
@@ -31,6 +32,12 @@ export default function MoviePlayer() {
         if (!res.ok) throw new Error('Failed to fetch movie details');
         const data = await res.json();
         setMovie(data);
+        
+        // Fetch Arabic Subtitles (via Wyzie Subtitles API)
+        if (data.imdb_id) {
+          fetchSubtitles(data.imdb_id);
+        }
+
         fetchStreams(data.imdb_id || id);
       } catch (err) {
         console.error(err);
@@ -42,12 +49,27 @@ export default function MoviePlayer() {
     fetchMovieDetails();
   }, [id]);
 
-  // 2. Fetch Compatible Web Streams Only
+  // Fetch Subtitles Helper
+  async function fetchSubtitles(imdbId) {
+    try {
+      const subRes = await fetch(`https://sub.wyzie.ru/search?id=${imdbId}`);
+      if (subRes.ok) {
+        const subData = await subRes.json();
+        // البحث عن ترجمة عربية (Arabic / ar)
+        const arSub = subData.find(s => s.display_name?.toLowerCase().includes('arabic') || s.lang === 'ar');
+        if (arSub && arSub.url) {
+          setSubtitleSrc(arSub.url);
+        }
+      }
+    } catch (e) {
+      console.log('Subtitles unavailable:', e);
+    }
+  }
+
+  // 2. Fetch Streams
   async function fetchStreams(imdbId) {
     try {
       setStatusText('Finding web-compatible servers...');
-      
-      // Filter out heavy 4K/CAM formats for optimal browser playback
       const torrentioUrl = `https://torrentio.strem.fun/qualityfilter=4k,scr,cam|sort=quality/stream/movie/${imdbId}.json`;
 
       const res = await fetch(torrentioUrl);
@@ -55,7 +77,6 @@ export default function MoviePlayer() {
 
       if (data.streams && data.streams.length > 0) {
         setStreams(data.streams);
-        // Start auto-testing from the first stream index
         handleSelectStream(data.streams[0], 0, data.streams);
       } else {
         setStatusText('No streams found for this title.');
@@ -68,7 +89,7 @@ export default function MoviePlayer() {
     }
   }
 
-  // 3. Unrestrict Link with Auto-Fallback for DMCA-blocked streams
+  // 3. Unrestrict Link
   async function handleSelectStream(stream, currentIndex = 0, currentStreamsList = streams) {
     const listToUse = currentStreamsList.length > 0 ? currentStreamsList : streams;
     setSelectedStream(stream);
@@ -91,7 +112,6 @@ export default function MoviePlayer() {
       const data = await res.json();
 
       if (!res.ok) {
-        // إذا كان السيرفر محظور بـ DMCA أو فيه مشكلة، جرب السيرفر الذي يليه تلقائياً
         if (currentIndex + 1 < listToUse.length) {
           setStatusText(`Server ${currentIndex + 1} unavailable. Auto-switching to server ${currentIndex + 2}...`);
           setTimeout(() => {
@@ -99,11 +119,10 @@ export default function MoviePlayer() {
           }, 400);
           return;
         } else {
-          throw new Error('All available servers for this movie are currently blocked by DMCA.');
+          throw new Error('All available servers for this movie are currently blocked.');
         }
       }
 
-      // إذا نجح الفك، شغل الفيديو فوراً
       setVideoSrc(data.downloadUrl);
       setLoading(false);
     } catch (err) {
@@ -113,7 +132,7 @@ export default function MoviePlayer() {
     }
   }
 
-  // 4. Attach Stream to Native HTML5 Player
+  // 4. Attach Stream to HTML5 Video
   useEffect(() => {
     if (!videoSrc || !videoRef.current) return;
 
@@ -155,7 +174,6 @@ export default function MoviePlayer() {
       </Head>
 
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '20px' }}>
-        {/* Header Navigation */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <Link href="/" style={{ color: '#fff', textDecoration: 'none', background: '#222', padding: '8px 16px', borderRadius: '6px', fontSize: '14px', fontWeight: 'bold' }}>
             ← Back
@@ -165,7 +183,7 @@ export default function MoviePlayer() {
           </h1>
         </div>
 
-        {/* In-Browser Video Player Frame */}
+        {/* Video Player Frame */}
         <div style={{ width: '100%', height: '540px', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #222', boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
@@ -179,11 +197,22 @@ export default function MoviePlayer() {
               autoPlay
               playsInline
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            />
+            >
+              {/* Arabic Subtitles Track */}
+              {subtitleSrc && (
+                <track
+                  kind="subtitles"
+                  src={subtitleSrc}
+                  srcLang="ar"
+                  label="العربية"
+                  default
+                />
+              )}
+            </video>
           )}
         </div>
 
-        {/* Optional Player Links (For Mobile / External Player Fallback) */}
+        {/* External Player Fallback Buttons */}
         {!loading && videoSrc && (
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '20px' }}>
             <a
