@@ -168,7 +168,7 @@ export default function Home({ initialMovies, initialShows }) {
           <div>
             <h1 style={{ color: '#e50914', fontSize: '30px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '2px', fontWeight: 'bold', letterSpacing: '1px' }}>
-              BY: NAWAF AL-NAZAWI
+              BY: Anonymous
             </div>
           </div>
           
@@ -259,7 +259,7 @@ export default function Home({ initialMovies, initialShows }) {
       </div>
 
       <footer style={{ width: '100%', textAlign: 'center', padding: '15px 0', borderTop: '1px solid #111', marginTop: '40px', fontSize: '12px', color: '#666', letterSpacing: '1px', fontWeight: 'bold' }}>
-        Developed & Powered by <span style={{ color: '#e50914' }}>NAWAF AL-NAZAWI</span> &copy; {new Date().getFullYear()}
+        Developed & Powered by <span style={{ color: '#e50914' }}>Anonymous</span> &copy; {new Date().getFullYear()}
       </footer>
     </div>
   );
