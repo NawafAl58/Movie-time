@@ -26,7 +26,7 @@ export default function MovieDetail() {
 
   const videoRef = useRef(null);
 
-  // 1️⃣ جلب تفاصيل المسلسل/الفيلم والحلقات من TMDB
+  // 1️⃣ جلب تفاصيل المسلسل/الفيلم من TMDB باللغة الأصلية (en-US)
   useEffect(() => {
     if (!id) return;
 
@@ -35,7 +35,7 @@ export default function MovieDetail() {
       const finalType = isTv ? 'tv' : 'movie';
 
       try {
-        const res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=ar-SA`);
+        const res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
         if (res.ok) {
           const data = await res.json();
           setMovieData(data);
@@ -48,13 +48,13 @@ export default function MovieDetail() {
     fetchMetadata();
   }, [id, type]);
 
-  // 2️⃣ جلب حلقات الموسم المحدد للمسلسلات
+  // 2️⃣ جلب حلقات الموسم باللغة الإنجليزية/الأصلية
   useEffect(() => {
     if (!id || (type !== 'tv' && movieData?.media_type_fixed !== 'tv')) return;
 
     async function fetchSeasonEpisodes() {
       try {
-        const res = await fetch(`${TMDB_BASE_URL}/tv/${id}/season/${season}?api_key=${TMDB_API_KEY}&language=ar-SA`);
+        const res = await fetch(`${TMDB_BASE_URL}/tv/${id}/season/${season}?api_key=${TMDB_API_KEY}&language=en-US`);
         if (res.ok) {
           const sData = await res.json();
           if (sData.episodes) {
@@ -69,7 +69,7 @@ export default function MovieDetail() {
     fetchSeasonEpisodes();
   }, [id, type, season, movieData]);
 
-  // 3️⃣ جلب روابط Real-Debrid عند تغير الفيلم/الموسم/الحلقة
+  // 3️⃣ جلب روابط Real-Debrid
   useEffect(() => {
     if (!id) return;
 
@@ -150,13 +150,13 @@ export default function MovieDetail() {
   if (loading && !movieData) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري التحميل...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 Loading...</h3>
       </div>
     );
   }
 
   const isTvShow = (type === 'tv' || movieData?.number_of_seasons > 0);
-  const displayTitle = movieData ? (movieData.title || movieData.name) : 'عرض مباشر 📺';
+  const displayTitle = movieData ? (movieData.title || movieData.name) : 'Watch Now 📺';
 
   const embedUrl = isTvShow 
     ? `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`
@@ -169,9 +169,31 @@ export default function MovieDetail() {
   };
 
   return (
-    <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
+    <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl', boxSizing: 'border-box' }}>
       <Head>
         <title>{displayTitle} - SimplStream</title>
+        {/* إخفاء وتغميق شريط التمرير والحواف البيضاء */}
+        <style>{`
+          html, body {
+            background-color: #050505 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow-x: hidden;
+          }
+          ::-webkit-scrollbar {
+            width: 8px;
+          }
+          ::-webkit-scrollbar-track {
+            background: #050505;
+          }
+          ::-webkit-scrollbar-thumb {
+            background: #222;
+            border-radius: 4px;
+          }
+          ::-webkit-scrollbar-thumb:hover {
+            background: #e50914;
+          }
+        `}</style>
       </Head>
 
       <button onClick={() => router.push('/')} style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}>
@@ -183,43 +205,41 @@ export default function MovieDetail() {
           <img src={movieData.poster_path ? `https://image.tmdb.org/t/p/w300${movieData.poster_path}` : 'https://via.placeholder.com/300x450'} alt={displayTitle} style={{ borderRadius: '12px', width: '220px', objectFit: 'cover' }} />
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
-            <p style={{ color: '#aaa', fontSize: '14px' }}>تاريخ الإصدار: {movieData.release_date || movieData.first_air_date} | ⭐ {movieData.vote_average?.toFixed(1)}</p>
+            <p style={{ color: '#aaa', fontSize: '14px' }}>Release Date: {movieData.release_date || movieData.first_air_date} | ⭐ {movieData.vote_average?.toFixed(1)}</p>
             
             <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderRight: '4px solid #e50914', fontSize: '13px', color: '#e50914', fontWeight: 'bold' }}>
               حقوق النشر والتشغيل محفوظة لـ: Anonymous
             </div>
             
-            <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>{movieData.overview || "لا يوجد وصف متاح حالياً."}</p>
+            <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>{movieData.overview || "No description available."}</p>
           </div>
         </div>
       )}
 
-      {/* 📺 اختيار الموسم والحلقة الديناميكي المطور للمسلسلات */}
+      {/* 📺 اختيار الموسم والحلقة للمسلسلات */}
       {isTvShow && (
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222', alignItems: 'center' }}>
           
-          {/* قائمة المواسم */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 'bold', color: '#e50914' }}>📅 الموسم:</span>
+            <span style={{ fontWeight: 'bold', color: '#e50914' }}>📅 Season:</span>
             <select 
               value={season} 
               onChange={(e) => {
                 setSeason(Number(e.target.value));
-                setEpisode(1); // العودة للحلقة الأولى عند تغيير الموسم
+                setEpisode(1);
               }}
               style={{ padding: '8px 12px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
             >
               {Array.from({ length: movieData?.number_of_seasons || 1 }, (_, i) => i + 1).map((sNum) => (
                 <option key={sNum} value={sNum}>
-                  الموسم {sNum}
+                  Season {sNum}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* قائمة الحلقات التفصيلية */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 الحلقة:</span>
+            <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 Episode:</span>
             <select 
               value={episode} 
               onChange={(e) => setEpisode(Number(e.target.value))}
@@ -228,11 +248,11 @@ export default function MovieDetail() {
               {episodesList.length > 0 ? (
                 episodesList.map((ep) => (
                   <option key={ep.episode_number} value={ep.episode_number}>
-                    الحلقة {ep.episode_number} - {ep.name || `حلقة ${ep.episode_number}`}
+                    Episode {ep.episode_number} - {ep.name || `Episode ${ep.episode_number}`}
                   </option>
                 ))
               ) : (
-                <option value={1}>الحلقة 1</option>
+                <option value={1}>Episode 1</option>
               )}
             </select>
           </div>
@@ -240,10 +260,10 @@ export default function MovieDetail() {
         </div>
       )}
 
-      {/* 🎬 اختيار الجودة بدون كسر DOM */}
+      {/* 🎬 اختيار الجودة */}
       {activeServer === 'debrid' && qualityOptions.length > 0 && (
         <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px 18px', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 'bold', color: '#e50914' }}>⚙️ اختر الجودة:</span>
+          <span style={{ fontWeight: 'bold', color: '#e50914' }}>⚙️ Quality:</span>
           <select 
             value={resolvedStreamUrl}
             onChange={(e) => {
@@ -286,7 +306,7 @@ export default function MovieDetail() {
         <button onClick={() => setActiveServer('vidlink')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidlink' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 3</button>
       </div>
 
-      {/* منطقة المشغل المستقرة */}
+      {/* منطقة المشغل */}
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <div style={{ position: 'relative', width: '100%', minHeight: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {activeServer === 'debrid' && resolvedStreamUrl ? (
@@ -295,7 +315,7 @@ export default function MovieDetail() {
               controls 
               autoPlay
               playsInline 
-              style={{ width: '100%', height: '60vh', borderRadius: '8px' }}
+              style={{ width: '100%', height: '60vh', borderRadius: '8px', backgroundColor: '#000' }}
             >
               <source src={resolvedStreamUrl} />
             </video>
