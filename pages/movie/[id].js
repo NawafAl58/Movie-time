@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 
@@ -10,18 +10,14 @@ export default function MoviePlayer() {
   const [movie, setMovie] = useState(null);
   const [streams, setStreams] = useState([]);
   const [selectedStream, setSelectedStream] = useState(null);
-  const [activeUrl, setActiveUrl] = useState('');
-  const [isHls, setIsHls] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState('');
   const [loading, setLoading] = useState(true);
-  const [statusText, setStatusText] = useState('Loading movie data...');
-
-  const videoRef = useRef(null);
-  const hlsRef = useRef(null);
+  const [statusText, setStatusText] = useState('Loading movie details...');
+  const [copied, setCopied] = useState(false);
 
   const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
-  const RD_API_KEY = process.env.NEXT_PUBLIC_REAL_DEBRID_API_KEY;
 
-  // 1. Fetch Movie Details (En-US)
+  // 1. Fetch Movie Details
   useEffect(() => {
     if (!id) return;
 
@@ -44,13 +40,11 @@ export default function MoviePlayer() {
     fetchMovieDetails();
   }, [id]);
 
-  // 2. Fetch Torrentio Streams (Filtered for better compatibility)
+  // 2. Fetch Streams from Torrentio
   async function fetchStreams(imdbId) {
     try {
-      setStatusText('Fetching available servers...');
-      // Filter out heavy formats to get web-compatible streams first
-      const TORRENTIO_CONFIG = 'qualityfilter=scr,cam,3d';
-      const torrentioUrl = `https://torrentio.strem.fun/${TORRENTIO_CONFIG}|realdebrid=${RD_API_KEY}/stream/movie/${imdbId}.json`;
+      setStatusText('Searching for streams on Real-Debrid...');
+      const torrentioUrl = `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
 
       const res = await fetch(torrentioUrl);
       const data = await res.json();
@@ -69,104 +63,41 @@ export default function MoviePlayer() {
     }
   }
 
-  // 3. Process Stream with Real-Debrid Transcode / Direct Fallback
+  // 3. Unrestrict Link via Internal API Route
   async function handleSelectStream(stream) {
     setSelectedStream(stream);
     setLoading(true);
-    setStatusText('Unrestricting stream link...');
+    setDownloadUrl('');
+    setStatusText('Unrestricting stream on Real-Debrid...');
 
     try {
       const rawStreamLink = stream.url || stream.externalUrl;
 
-      // 3.1 Unrestrict Raw Link
-      const targetApi = encodeURIComponent('https://api.real-debrid.com/rest/1.0/unrestrict/link');
-      const formData = new FormData();
-      formData.append('link', rawStreamLink);
-
-      const unrestrictRes = await fetch(`https://corsproxy.io/?${targetApi}`, {
+      const res = await fetch('/api/unrestrict', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${RD_API_KEY}` },
-        body: formData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link: rawStreamLink }),
       });
 
-      if (!unrestrictRes.ok) throw new Error(`Real-Debrid Unrestrict Error: ${unrestrictRes.status}`);
+      const data = await res.json();
 
-      const rdData = await unrestrictRes.json();
-      const fileId = rdData.id;
-      const directLink = rdData.download;
+      if (!res.ok) throw new Error(data.error || 'Failed to unrestrict');
 
-      // 3.2 Try to Fetch H.264 Transcoded Streaming Endpoint (Fixes Black Screen)
-      try {
-        setStatusText('Preparing web-compatible video stream...');
-        const transcodeApi = encodeURIComponent(`https://api.real-debrid.com/rest/1.0/streaming/transcode/${fileId}`);
-        const transRes = await fetch(`https://corsproxy.io/?${transcodeApi}`, {
-          headers: { 'Authorization': `Bearer ${RD_API_KEY}` }
-        });
-
-        if (transRes.ok) {
-          const transData = await transRes.json();
-          // Pick H.264 compatible live MP4 stream
-          const webPlayableUrl = 
-            transData.fullHD?.liveMP4 || 
-            transData.hd?.liveMP4 || 
-            transData.apple?.fullHD || 
-            transData.liveMP4;
-
-          if (webPlayableUrl) {
-            setActiveUrl(webPlayableUrl);
-            setIsHls(webPlayableUrl.includes('.m3u8'));
-            setLoading(false);
-            return;
-          }
-        }
-      } catch (transcodeErr) {
-        console.warn('Transcode unavailable, falling back to direct link:', transcodeErr);
-      }
-
-      // 3.3 Fallback to direct link
-      setActiveUrl(directLink);
-      setIsHls(directLink.endsWith('.m3u8'));
+      setDownloadUrl(data.downloadUrl);
       setLoading(false);
-
     } catch (err) {
-      console.error('Streaming Error:', err);
-      setStatusText(`Playback Error: ${err.message}`);
+      console.error('Unrestrict Error:', err);
+      setStatusText(`Error: ${err.message}`);
       setLoading(false);
     }
   }
 
-  // 4. Attach Player & Handle HLS
-  useEffect(() => {
-    if (!activeUrl || !videoRef.current) return;
-
-    if (isHls) {
-      import('hls.js').then((HlsModule) => {
-        const Hls = HlsModule.default;
-        if (Hls.isSupported()) {
-          if (hlsRef.current) hlsRef.current.destroy();
-
-          const hls = new Hls({ enableWorker: true });
-          hls.loadSource(activeUrl);
-          hls.attachMedia(videoRef.current);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoRef.current.play().catch(() => {});
-          });
-
-          hlsRef.current = hls;
-        } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-          videoRef.current.src = activeUrl;
-          videoRef.current.play().catch(() => {});
-        }
-      });
-    } else {
-      videoRef.current.src = activeUrl;
-      videoRef.current.play().catch(() => {});
-    }
-
-    return () => {
-      if (hlsRef.current) hlsRef.current.destroy();
-    };
-  }, [activeUrl, isHls]);
+  const copyToClipboard = () => {
+    if (!downloadUrl) return;
+    navigator.clipboard.writeText(downloadUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div style={{ backgroundColor: '#0a0a0a', color: '#fff', minHeight: '100vh', margin: 0, padding: 0, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -178,7 +109,7 @@ export default function MoviePlayer() {
         `}</style>
       </Head>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <Link href="/" style={{ color: '#fff', textDecoration: 'none', background: '#222', padding: '10px 20px', borderRadius: '6px', fontSize: '14px', fontWeight: 'bold' }}>
@@ -189,25 +120,72 @@ export default function MoviePlayer() {
           </h1>
         </div>
 
-        {/* Video Player */}
-        <div style={{ width: '100%', height: '560px', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', border: '1px solid #222' }}>
+        {/* External Player Control Panel */}
+        <div style={{ width: '100%', minHeight: '320px', backgroundColor: '#121212', borderRadius: '12px', padding: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', border: '1px solid #222', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: '#888' }}>
-              <div style={{ fontSize: '20px', marginBottom: '8px' }}>⏳</div>
-              <p style={{ margin: 0, fontSize: '14px' }}>{statusText}</p>
+              <div style={{ fontSize: '24px', marginBottom: '12px' }}>⏳</div>
+              <p style={{ margin: 0, fontSize: '16px' }}>{statusText}</p>
+            </div>
+          ) : downloadUrl ? (
+            <div style={{ textAlign: 'center', width: '100%', maxWidth: '600px' }}>
+              <h2 style={{ fontSize: '18px', color: '#fff', marginBottom: '8px' }}>Stream Ready!</h2>
+              <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '25px' }}>
+                Select an external media player to start watching seamlessly without browser limitations.
+              </p>
+
+              {/* Player Buttons */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '20px' }}>
+                {/* VLC Player */}
+                <a
+                  href={`vlc://${downloadUrl}`}
+                  style={{ backgroundColor: '#ff8800', color: '#fff', textDecoration: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  ▶ Open in VLC
+                </a>
+
+                {/* Infuse (iOS / Mac) */}
+                <a
+                  href={`infuse://x-callback-url/play?url=${encodeURIComponent(downloadUrl)}`}
+                  style={{ backgroundColor: '#0070f3', color: '#fff', textDecoration: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  ▶ Open in Infuse
+                </a>
+
+                {/* MX Player (Android) */}
+                <a
+                  href={`intent:${downloadUrl}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end`}
+                  style={{ backgroundColor: '#2e7d32', color: '#fff', textDecoration: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  ▶ Open in MX Player
+                </a>
+              </div>
+
+              {/* Direct Link / Copy Option */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '15px' }}>
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#aaa', textDecoration: 'underline', fontSize: '13px' }}
+                >
+                  Direct Stream Link
+                </a>
+                <span style={{ color: '#444' }}>|</span>
+                <button
+                  onClick={copyToClipboard}
+                  style={{ background: 'none', border: 'none', color: '#e50914', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                >
+                  {copied ? '✓ Copied!' : 'Copy Stream URL'}
+                </button>
+              </div>
             </div>
           ) : (
-            <video
-              ref={videoRef}
-              controls
-              autoPlay
-              playsInline
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            />
+            <p style={{ color: '#e50914' }}>{statusText}</p>
           )}
         </div>
 
-        {/* Server Selection */}
+        {/* Servers Selection */}
         <div style={{ marginTop: '30px' }}>
           <h3 style={{ fontSize: '16px', color: '#ccc', marginBottom: '15px' }}>
             Available Servers ({streams.length}):
