@@ -14,6 +14,9 @@ export default function MoviePlayerPage() {
   const router = useRouter();
   const { id, type } = router.query;
 
+  // 🔴 إضافة التعريف المفقود لـ videoRef لمنع الكراش
+  const videoRef = useRef(null);
+
   const [mediaType, setMediaType] = useState(type === 'tv' ? 'tv' : 'movie');
   const [details, setDetails] = useState(null);
   const [imdbId, setImdbId] = useState(null);
@@ -27,7 +30,6 @@ export default function MoviePlayerPage() {
   // السيرفرات والجودات
   const [streams, setStreams] = useState([]);
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
-  const [activeQuality, setActiveQuality] = useState('');
   const [loadingStreams, setLoadingStreams] = useState(false);
 
   // الترجمات
@@ -38,7 +40,7 @@ export default function MoviePlayerPage() {
     if (type) setMediaType(type === 'tv' ? 'tv' : 'movie');
   }, [type]);
 
-  // 1️⃣ جلب بيانات TMDB لمعرفة الـ IMDb ID
+  // 1️⃣ جلب بيانات TMDB لمعرفة IMDb ID
   useEffect(() => {
     if (!id || mediaType === 'live') return;
 
@@ -84,7 +86,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب السيرفرات زي ستريميو بالضبط (طريقة Torrentio Stream المباشرة)
+  // 3️⃣ جلب السيرفرات المباشرة من Torrentio
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
@@ -102,14 +104,12 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.streams && data.streams.length > 0) {
-          // فلترة سريعة للروابط الجاهزة للتشغيل المباشر
           const validStreams = data.streams.filter(s => s.url || s.externalUrl);
           setStreams(validStreams);
 
           if (validStreams.length > 0) {
             const first = validStreams[0];
             setActiveStreamUrl(first.url || first.externalUrl);
-            setActiveQuality(first.name || 'Auto');
           }
         }
       } catch (err) {
@@ -121,17 +121,18 @@ export default function MoviePlayerPage() {
     fetchRDStreams();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب ترجمة OpenSubtitles المباشرة
+  // 4️⃣ جلب ترجمة OpenSubtitles مع معالجة أي خطأ في النطاق
   useEffect(() => {
     if (!imdbId) return;
 
     async function fetchSubtitles() {
       try {
         let subEndpoint = mediaType === 'tv'
-          ? `https://opensubtitles-v3.strem.fun/subtitles/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`
-          : `https://opensubtitles-v3.strem.fun/subtitles/movie/${imdbId}.json`;
+          ? `https://opensubtitles.strem.fun/subtitles/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`
+          : `https://opensubtitles.strem.fun/subtitles/movie/${imdbId}.json`;
 
         const res = await fetch(subEndpoint);
+        if (!res.ok) return;
         const data = await res.json();
 
         if (data && data.subtitles) {
@@ -142,7 +143,7 @@ export default function MoviePlayerPage() {
           setEnglishSub(en?.url || '');
         }
       } catch (err) {
-        console.error("Subtitles fetch error:", err);
+        console.warn("Subtitles fetch warning:", err);
       }
     }
 
@@ -168,7 +169,7 @@ export default function MoviePlayerPage() {
         </h1>
       </div>
 
-      {/* مشغل الفيديو زي ستريميو */}
+      {/* مشغل الفيديو */}
       <div style={{ width: '100%', height: '68vh', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1c1c1c', position: 'relative', marginBottom: '20px' }}>
         {mediaType === 'live' ? (
           <iframe 
@@ -211,7 +212,6 @@ export default function MoviePlayerPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888', gap: '15px' }}>
             <div>{loadingStreams ? 'Loading Real-Debrid Streams...' : 'No Stream Loaded.'}</div>
-            {/* مشغل احتياطي إضافي يفتح فوراً في حال محاصرة المتصفح للروابط */}
             {imdbId && (
               <iframe 
                 src={mediaType === 'tv' 
@@ -225,7 +225,7 @@ export default function MoviePlayerPage() {
         )}
       </div>
 
-      {/* اختيار الموسم والحلقة */}
+      {/* اختيار الموسم والحلقة للمسلسلات */}
       {mediaType === 'tv' && seasons.length > 0 && (
         <div style={{ marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -280,10 +280,7 @@ export default function MoviePlayerPage() {
               return (
                 <button
                   key={idx}
-                  onClick={() => {
-                    setActiveStreamUrl(url);
-                    setActiveQuality(name);
-                  }}
+                  onClick={() => setActiveStreamUrl(url)}
                   style={{
                     backgroundColor: isSelected ? '#e50914' : '#141414',
                     color: 'white',
