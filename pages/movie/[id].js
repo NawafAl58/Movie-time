@@ -6,7 +6,7 @@ import Head from 'next/head';
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
-// 🔑 تم إدراج API Token الخاص بك هنا
+// 🔑 API Key الخاص بك
 const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`;
 
@@ -22,14 +22,12 @@ export default function MoviePlayerPage() {
   const [episodes, setEpisodes] = useState([]);
   const [selectedEpisode, setSelectedEpisode] = useState(1);
 
-  // إدارة الجودات والسيرفرات المفلترة
   const [groupedQualityStreams, setGroupedQualityStreams] = useState({});
   const [availableQualities, setAvailableQualities] = useState([]);
   const [selectedQuality, setSelectedQuality] = useState('');
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
   const [loadingStreams, setLoadingStreams] = useState(false);
 
-  // الترجمات المحولة إلى Blob URLs لتفادي حظر المتصفح (CORS)
   const [arabicSubBlob, setArabicSubBlob] = useState('');
   const [englishSubBlob, setEnglishSubBlob] = useState('');
   const videoRef = useRef(null);
@@ -38,7 +36,7 @@ export default function MoviePlayerPage() {
     if (type) setMediaType(type === 'tv' ? 'tv' : 'movie');
   }, [type]);
 
-  // 1️⃣ جلب تفاصيل المادة
+  // 1️⃣ جلب تفاصيل الفيلم/المسلسل
   useEffect(() => {
     if (!id || mediaType === 'live') return;
 
@@ -64,7 +62,7 @@ export default function MoviePlayerPage() {
     fetchDetails();
   }, [id, mediaType]);
 
-  // 2️⃣ جلب حلقات المسلسل
+  // 2️⃣ جلب حلقات المسلسلات
   useEffect(() => {
     if (mediaType !== 'tv' || !id || !selectedSeason) return;
 
@@ -84,7 +82,42 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب وتجميع الأقسام حسب الجودات (4K, 2K, 1080p, 720p, 480p) واختيار الأسرع تلقائياً
+  // دالة تحويل أي رابط إلى رابط تشغيل مباشر عبر Real-Debrid API (Unrestrict)
+  const resolveDirectStreamUrl = async (stream) => {
+    let rawUrl = stream.url || '';
+
+    // إذا كان الرابط جاهزاً ومباشراً
+    if (rawUrl.match(/\.(mp4|mkv|avi|mov)$/i)) {
+      return rawUrl;
+    }
+
+    // فك التشفير عن طريق Real-Debrid API للحصول على الرابط المباشر
+    try {
+      if (rawUrl) {
+        const formData = new FormData();
+        formData.append('link', rawUrl);
+
+        const rdRes = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RD_API_KEY}`
+          },
+          body: formData
+        });
+
+        const rdData = await rdRes.json();
+        if (rdData && rdData.download) {
+          return rdData.download; // الرابط المباشر الحقيقي للشاشات والمشغل
+        }
+      }
+    } catch (e) {
+      console.error("Unrestrict Error:", e);
+    }
+
+    return rawUrl;
+  };
+
+  // 3️⃣ جلب السيرفرات وتصفيتها واختيار الرابط المباشر الشغال 100%
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
@@ -107,7 +140,7 @@ export default function MoviePlayerPage() {
 
           data.streams.forEach(stream => {
             const fullText = `${stream.name || ''} ${stream.title || ''}`.toLowerCase();
-            
+
             let quality = '720p';
             if (fullText.includes('4k') || fullText.includes('2160p')) quality = '4K';
             else if (fullText.includes('1440p') || fullText.includes('2k')) quality = '2K';
@@ -116,7 +149,7 @@ export default function MoviePlayerPage() {
             else if (fullText.includes('480p') || fullText.includes('360p')) quality = '480p';
 
             const isDV = fullText.includes(' dv ') || fullText.includes('dolby vision');
-            
+
             if (!qualityGroups[quality]) {
               qualityGroups[quality] = [];
             }
@@ -128,18 +161,18 @@ export default function MoviePlayerPage() {
             }
           });
 
-          const qualitiesOrder = ['4K', '2K', '1080p', '720p', '480p'];
+          const qualitiesOrder = ['1080p', '4K', '2K', '720p', '480p'];
           const existingQualities = qualitiesOrder.filter(q => qualityGroups[q] && qualityGroups[q].length > 0);
 
           setGroupedQualityStreams(qualityGroups);
           setAvailableQualities(existingQualities);
 
-          const defaultQuality = existingQualities.includes('1080p') ? '1080p' : existingQualities[0];
+          const defaultQuality = existingQualities[0];
           if (defaultQuality) {
             setSelectedQuality(defaultQuality);
             const bestStream = qualityGroups[defaultQuality][0];
-            const url = bestStream.url || (bestStream.infoHash ? `https://torrentio.strem.fun/realdebrid/${bestStream.infoHash}` : '');
-            setActiveStreamUrl(url);
+            const directUrl = await resolveDirectStreamUrl(bestStream);
+            setActiveStreamUrl(directUrl);
           }
         }
       } catch (err) {
@@ -151,7 +184,7 @@ export default function MoviePlayerPage() {
     fetchRDStreams();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب الترجمات وتحويلها تلقائياً إلى Blob WebVTT
+  // 4️⃣ جلب الترجمات المباشرة وتحويلها لـ Blob WebVTT
   useEffect(() => {
     if (!imdbId) return;
 
@@ -203,13 +236,15 @@ export default function MoviePlayerPage() {
     fetchAndConvertSubtitles();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  const handleQualityChange = (quality) => {
+  const handleQualityChange = async (quality) => {
     setSelectedQuality(quality);
     const streamsList = groupedQualityStreams[quality];
     if (streamsList && streamsList.length > 0) {
+      setLoadingStreams(true);
       const bestStream = streamsList[0];
-      const url = bestStream.url || (bestStream.infoHash ? `https://torrentio.strem.fun/realdebrid/${bestStream.infoHash}` : '');
-      setActiveStreamUrl(url);
+      const directUrl = await resolveDirectStreamUrl(bestStream);
+      setActiveStreamUrl(directUrl);
+      setLoadingStreams(false);
     }
   };
 
@@ -232,7 +267,7 @@ export default function MoviePlayerPage() {
         </h1>
       </div>
 
-      {/* مشغل الفيديو الشامل */}
+      {/* مشغل الفيديو */}
       <div style={{ width: '100%', height: '68vh', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1c1c1c', position: 'relative', marginBottom: '20px' }}>
         {mediaType === 'live' ? (
           <iframe 
@@ -276,7 +311,7 @@ export default function MoviePlayerPage() {
           </video>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
-            {loadingStreams ? 'Finding Best Fast Stream...' : 'No streams available.'}
+            {loadingStreams ? 'Resolving Direct Stream via Real-Debrid...' : 'No stream available.'}
           </div>
         )}
       </div>
@@ -324,7 +359,7 @@ export default function MoviePlayerPage() {
       {mediaType !== 'live' && availableQualities.length > 0 && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#aaa' }}>
-            Select Quality (Auto-selected Best Server):
+            Select Quality (Direct Stream):
           </h3>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             {availableQualities.map((quality) => {
