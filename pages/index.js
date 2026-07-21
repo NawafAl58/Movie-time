@@ -1,3 +1,4 @@
+// pages/index.js
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -6,26 +7,27 @@ const API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
 
+// خريطة الـ Slug لتوجيه التصفح لصفحات مستقلة
 const GENRES_EN = [
-  { id: 'all', name: 'Trending 🔥' },
-  { id: 'arabic', name: 'Arabic 🇸🇦' }, 
-  { id: '28', name: 'Action 💥' },
-  { id: '27', name: 'Horror 👻' },
-  { id: '35', name: 'Comedy 😂' },
-  { id: '10749', name: 'Romance ❤️' },
-  { id: '878', name: 'Sci-Fi 🚀' },
-  { id: '18', name: 'Drama 🎭' }
+  { id: 'all', slug: 'all', name: 'Trending 🔥' },
+  { id: 'arabic', slug: 'arabic', name: 'Arabic 🇸🇦' }, 
+  { id: '28', slug: 'action', name: 'Action 💥' },
+  { id: '27', slug: 'horror', name: 'Horror 👻' },
+  { id: '35', slug: 'comedy', name: 'Comedy 😂' },
+  { id: '10749', slug: 'romance', name: 'Romance ❤️' },
+  { id: '878', slug: 'scifi', name: 'Sci-Fi 🚀' },
+  { id: '18', slug: 'drama', name: 'Drama 🎭' }
 ];
 
 const GENRES_AR = [
-  { id: 'all', name: 'المحتوى الشائع 🔥' },
-  { id: 'arabic', name: 'عربي 🇸🇦' }, 
-  { id: '28', name: 'أكشن 💥' },
-  { id: '27', name: 'رعب 👻' },
-  { id: '35', name: 'كوميدي 😂' },
-  { id: '10749', name: 'رومانسي ❤️' },
-  { id: '878', name: 'خيال علمي 🚀' },
-  { id: '18', name: 'دراما 🎭' }
+  { id: 'all', slug: 'all', name: 'المحتوى الشائع 🔥' },
+  { id: 'arabic', slug: 'arabic', name: 'عربي 🇸🇦' }, 
+  { id: '28', slug: 'action', name: 'أكشن 💥' },
+  { id: '27', slug: 'horror', name: 'رعب 👻' },
+  { id: '35', slug: 'comedy', name: 'كوميدي 😂' },
+  { id: '10749', slug: 'romance', name: 'رومانسي ❤️' },
+  { id: '878', slug: 'scifi', name: 'خيال علمي 🚀' },
+  { id: '18', slug: 'drama', name: 'دراما 🎭' }
 ];
 
 async function fetchMultiplePages(urlWithoutPage, totalPages = 3) {
@@ -58,8 +60,6 @@ export default function Home({ initialMovies, initialShows }) {
   const [activeTab, setActiveTab] = useState('movies'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [selectedGenre, setSelectedGenre] = useState('all');
-  const [genreItems, setGenreItems] = useState([]);
   const [trendingMovies, setTrendingMovies] = useState(initialMovies);
   const [trendingShows, setTrendingShows] = useState(initialShows);
 
@@ -72,7 +72,6 @@ export default function Home({ initialMovies, initialShows }) {
     setLang(newLang);
     localStorage.setItem('site_lang', newLang);
     setSearchQuery('');
-    setSelectedGenre('all');
   };
 
   useEffect(() => {
@@ -106,34 +105,13 @@ export default function Home({ initialMovies, initialShows }) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, activeTab, lang]);
 
-  useEffect(() => {
-    if (selectedGenre === 'all') {
-      setGenreItems([]);
+  const handleGenreClick = (genre) => {
+    if (genre.slug === 'all') {
       return;
     }
-    
-    const fetchGenreData = async () => {
-      const type = activeTab === 'movies' ? 'movie' : 'tv';
-      const isArabicGenre = selectedGenre === 'arabic';
-      const currentLang = isArabicGenre ? 'ar-SA' : (lang === 'ar' ? 'ar-SA' : 'en-US');
-      let url = `${BASE_URL}/discover/${type}?api_key=${API_KEY}&sort_by=popularity.desc&language=${currentLang}`;
-      
-      if (isArabicGenre) {
-        url += `&with_original_language=ar`; 
-      } else {
-        url += `&with_genres=${selectedGenre}`; 
-      }
-      
-      const data = await fetchMultiplePages(url);
-      setGenreItems(data);
-    };
-    
-    fetchGenreData();
-  }, [selectedGenre, activeTab, lang]);
-
-  useEffect(() => {
-    setSelectedGenre('all');
-  }, [activeTab]);
+    // التوجيه لصفحة التصنيف المخصصة
+    router.push(`/category/${genre.slug}?type=${activeTab}`);
+  };
 
   let currentItems = [];
   const genresList = lang === 'ar' ? GENRES_AR : GENRES_EN;
@@ -142,14 +120,6 @@ export default function Home({ initialMovies, initialShows }) {
   if (searchQuery.trim() !== '') {
     currentItems = searchResults;
     sectionTitle = lang === 'ar' ? `نتائج البحث عن "${searchQuery}"` : `Search Results for "${searchQuery}"`;
-  } else if (selectedGenre !== 'all') {
-    currentItems = genreItems;
-    const genreObj = genresList.find(g => g.id === selectedGenre);
-    if (selectedGenre === 'arabic') {
-      sectionTitle = lang === 'ar' ? (activeTab === 'movies' ? 'الأفلام العربية 🎬' : 'المسلسلات العربية 📺') : (activeTab === 'movies' ? 'Arabic Movies 🎬' : 'Arabic Series 📺');
-    } else {
-      sectionTitle = genreObj ? genreObj.name : '';
-    }
   } else {
     currentItems = activeTab === 'movies' ? trendingMovies : trendingShows;
   }
@@ -190,7 +160,6 @@ export default function Home({ initialMovies, initialShows }) {
           </div>
 
           <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-            {/* 🔴 زر البث المباشر النظيف والآمن المضاف للملاحة العلوية */}
             <button 
               tabIndex="0" 
               className="btn-tv-focusable" 
@@ -209,16 +178,17 @@ export default function Home({ initialMovies, initialShows }) {
           </div>
         </header>
 
+        {/* أزرار التصنيف بنظام الصفحات المستقلة */}
         <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '25px', scrollbarWidth: 'none' }}>
           {genresList.map((genre) => (
             <button
               key={genre.id}
               tabIndex="0"
               className="btn-tv-focusable"
-              onClick={() => { setSelectedGenre(genre.id); }}
+              onClick={() => handleGenreClick(genre)}
               style={{
-                backgroundColor: selectedGenre === genre.id ? '#fff' : '#111',
-                color: selectedGenre === genre.id ? '#000' : '#fff',
+                backgroundColor: genre.slug === 'all' ? '#fff' : '#111',
+                color: genre.slug === 'all' ? '#000' : '#fff',
                 border: '1px solid #222', padding: '8px 18px', fontSize: '14px', fontWeight: 'bold', borderRadius: '20px', cursor: 'pointer', whiteSpace: 'nowrap'
               }}
             >
