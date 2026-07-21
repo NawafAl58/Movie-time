@@ -6,9 +6,13 @@ import Head from 'next/head';
 const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
+// 🔴 الـ API Token والـ Base URL الخاصين بـ Real-Debrid عبر Torrentio
+const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q'; // استبدل هذا بالتوكن الخاص بك من real-debrid.com/apitoken
+const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/realdebrid=${RD_API_KEY}`;
+
 export default function MoviePlayerPage() {
   const router = useRouter();
-  const { id, type } = router.query; // type: 'movie' or 'tv' or 'live'
+  const { id, type } = router.query;
 
   const [details, setDetails] = useState(null);
   const [imdbId, setImdbId] = useState(null);
@@ -17,18 +21,17 @@ export default function MoviePlayerPage() {
   const [episodes, setEpisodes] = useState([]);
   const [selectedEpisode, setSelectedEpisode] = useState(1);
 
-  // السيرفرات والجودات
   const [streams, setStreams] = useState([]);
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
   const [activeStreamIndex, setActiveStreamIndex] = useState(0);
   const [loadingStreams, setLoadingStreams] = useState(false);
 
-  // الترجمات (عربي + إنجليزي)
+  // الترجمات العربية والإنجليزية
   const [arabicSubUrl, setArabicSubUrl] = useState('');
   const [englishSubUrl, setEnglishSubUrl] = useState('');
   const videoRef = useRef(null);
 
-  // 1️⃣ جلب تفاصيل الفيلم/المسلسل لمعرفة IMDb ID
+  // 1️⃣ جلب تفاصيل المادة لمعرفة IMDb ID
   useEffect(() => {
     if (!id || type === 'live') return;
 
@@ -53,7 +56,7 @@ export default function MoviePlayerPage() {
     fetchDetails();
   }, [id, type]);
 
-  // 2️⃣ جلب حلقات الموسم المحدد للمسلسلات
+  // 2️⃣ جلب حلقات الموسم للمسلسلات
   useEffect(() => {
     if (type !== 'tv' || !id || !selectedSeason) return;
 
@@ -73,7 +76,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, type, selectedSeason]);
 
-  // 3️⃣ جلب روابط Real-Debrid وتصفيتها من DV لعمل التشغيل المباشر
+  // 3️⃣ جلب روابط Real-Debrid مباشرة باستخدام الـ Base URL المربوط بالتوكن
   useEffect(() => {
     if (!imdbId && type !== 'live') return;
 
@@ -85,41 +88,20 @@ export default function MoviePlayerPage() {
 
       let endpoint = '';
       if (type === 'tv') {
-        endpoint = `https://torrentio.strem.fun/stream/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`;
+        endpoint = `${TORRENTIO_BASE_URL}/stream/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`;
       } else {
-        endpoint = `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
+        endpoint = `${TORRENTIO_BASE_URL}/stream/movie/${imdbId}.json`;
       }
 
       try {
         const res = await fetch(endpoint);
         const data = await res.json();
+
         if (data && data.streams && data.streams.length > 0) {
-          
-          // 🔴 استبعاد صيغ Dolby Vision (DV) لأنها تسبب شاشة سوداء وترتيب الروابط الأنسب للمتصفح
-          const filteredStreams = data.streams.filter(s => {
-            const text = ((s.name || '') + ' ' + (s.title || '')).toLowerCase();
-            return !text.includes(' dv ') && !text.includes('dolby vision') && !text.includes('dovi');
-          });
-
-          const validStreams = filteredStreams.length > 0 ? filteredStreams : data.streams;
-
-          // ترتيب لتفضيل H.264 و 1080p
-          const sortedStreams = [...validStreams].sort((a, b) => {
-            const titleA = ((a.name || '') + ' ' + (a.title || '')).toLowerCase();
-            const titleB = ((b.name || '') + ' ' + (b.title || '')).toLowerCase();
-
-            const is1080A = titleA.includes('1080p');
-            const is1080B = titleB.includes('1080p');
-
-            if (is1080A && !is1080B) return -1;
-            if (!is1080A && is1080B) return 1;
-            return 0;
-          });
-
-          setStreams(sortedStreams);
+          setStreams(data.streams);
           setActiveStreamIndex(0);
 
-          const firstStream = sortedStreams[0];
+          const firstStream = data.streams[0];
           const url = firstStream.url || (firstStream.infoHash ? `https://torrentio.strem.fun/realdebrid/${firstStream.infoHash}` : '');
           setActiveStreamUrl(url);
         }
@@ -147,11 +129,9 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.subtitles) {
-          // الترجمة العربية
           const arabicSub = data.subtitles.find(s => s.lang === 'ara' || s.lang === 'ar');
           setArabicSubUrl(arabicSub?.url || '');
 
-          // الترجمة الإنجليزية
           const englishSub = data.subtitles.find(s => s.lang === 'eng' || s.lang === 'en');
           setEnglishSubUrl(englishSub?.url || '');
         }
@@ -233,7 +213,7 @@ export default function MoviePlayerPage() {
           </video>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
-            {loadingStreams ? 'Loading Compatible Real-Debrid Streams...' : 'No stream available. Select a quality below.'}
+            {loadingStreams ? 'Loading Real-Debrid Streams...' : 'No stream available. Select a quality below.'}
           </div>
         )}
       </div>
@@ -281,16 +261,14 @@ export default function MoviePlayerPage() {
       {type !== 'live' && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#aaa' }}>
-            Available Qualities & Servers:
+            Available Real-Debrid Servers:
           </h3>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {streams.map((stream, idx) => {
               const isSelected = activeStreamIndex === idx;
-              
-              // استخراج حجم الملف من العنوان إن وجد
-              const sizeMatch = stream.title ? stream.title.match(/💾\s*([\d\.]+\s*[G|M]B)/i) : null;
-              const size = sizeMatch ? `(${sizeMatch[1]})` : '';
-              const cleanName = (stream.name || 'Server').replace('\n', ' ');
+              const nameText = (stream.name || '').replace('\n', ' ');
+              const titleText = (stream.title || '').split('\n')[0];
+              const label = `${nameText} - ${titleText}`.slice(0, 35);
 
               return (
                 <button
@@ -303,11 +281,11 @@ export default function MoviePlayerPage() {
                     padding: '8px 16px',
                     borderRadius: '6px',
                     cursor: 'pointer',
-                    fontSize: '13px',
+                    fontSize: '12px',
                     fontWeight: 'bold'
                   }}
                 >
-                  {cleanName} {size}
+                  {label}
                 </button>
               );
             })}
