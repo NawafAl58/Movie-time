@@ -33,7 +33,7 @@ export default function MoviePlayer() {
         const data = await res.json();
         setMovie(data);
         
-        // Fetch Arabic Subtitles (via Wyzie Subtitles API)
+        // Fetch Arabic Subtitles via OpenSubtitles/Stremio Subtitles API
         if (data.imdb_id) {
           fetchSubtitles(data.imdb_id);
         }
@@ -49,24 +49,28 @@ export default function MoviePlayer() {
     fetchMovieDetails();
   }, [id]);
 
-  // Fetch Subtitles Helper
+  // Public Free Arabic Subtitles Fetcher
   async function fetchSubtitles(imdbId) {
     try {
-      const subRes = await fetch(`https://sub.wyzie.ru/search?id=${imdbId}`);
+      const subRes = await fetch(`https://v3-cinemeta.strem.fun/subtitles/movie/${imdbId}.json`);
       if (subRes.ok) {
         const subData = await subRes.json();
-        // البحث عن ترجمة عربية (Arabic / ar)
-        const arSub = subData.find(s => s.display_name?.toLowerCase().includes('arabic') || s.lang === 'ar');
-        if (arSub && arSub.url) {
-          setSubtitleSrc(arSub.url);
+        if (subData.subtitles && subData.subtitles.length > 0) {
+          // البحث عن الترجمة العربية
+          const arSub = subData.subtitles.find(
+            (s) => s.lang === 'ara' || s.lang === 'ar' || s.id?.includes('ara')
+          );
+          if (arSub && arSub.url) {
+            setSubtitleSrc(arSub.url);
+          }
         }
       }
     } catch (e) {
-      console.log('Subtitles unavailable:', e);
+      console.log('Subtitles search error:', e);
     }
   }
 
-  // 2. Fetch Streams
+  // 2. Fetch Compatible Web Streams
   async function fetchStreams(imdbId) {
     try {
       setStatusText('Finding web-compatible servers...');
@@ -95,7 +99,7 @@ export default function MoviePlayer() {
     setSelectedStream(stream);
     setLoading(true);
     setVideoSrc('');
-    setStatusText(`Testing server ${currentIndex + 1} of ${listToUse.length}...`);
+    setStatusText(`Connecting to server ${currentIndex + 1} of ${listToUse.length}...`);
 
     try {
       let rawStreamLink = stream.url || stream.externalUrl;
@@ -113,10 +117,10 @@ export default function MoviePlayer() {
 
       if (!res.ok) {
         if (currentIndex + 1 < listToUse.length) {
-          setStatusText(`Server ${currentIndex + 1} unavailable. Auto-switching to server ${currentIndex + 2}...`);
+          setStatusText(`Server ${currentIndex + 1} unavailable. Testing server ${currentIndex + 2}...`);
           setTimeout(() => {
             handleSelectStream(listToUse[currentIndex + 1], currentIndex + 1, listToUse);
-          }, 400);
+          }, 600); // إعطاء مهلة لتجنب الـ Rate Limit
           return;
         } else {
           throw new Error('All available servers for this movie are currently blocked.');
