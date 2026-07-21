@@ -3,332 +3,310 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 
-const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
+const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
-export default function MovieDetail() {
+export default function MoviePlayerPage() {
   const router = useRouter();
-  const { id, type } = router.query;
-  
-  const [movieData, setMovieData] = useState(null);
-  const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
-  const [qualityOptions, setQualityOptions] = useState([]);
-  const [rdStatus, setRdStatus] = useState('loading');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [activeServer, setActiveServer] = useState('debrid');
-  const [loading, setLoading] = useState(true);
+  const { id, type } = router.query; // type: 'movie' or 'tv' or 'live'
 
-  // حالة الموسم والحلقة التفصيلية
-  const [season, setSeason] = useState(1);
-  const [episode, setEpisode] = useState(1);
-  const [episodesList, setEpisodesList] = useState([]);
+  const [details, setDetails] = useState(null);
+  const [imdbId, setImdbId] = useState(null);
+  const [seasons, setSeasons] = useState([]);
+  const [selectedSeason, setSelectedSeason] = useState(1);
+  const [episodes, setEpisodes] = useState([]);
+  const [selectedEpisode, setSelectedEpisode] = useState(1);
 
+  // السيرفرات والجودات
+  const [streams, setStreams] = useState([]);
+  const [activeStreamUrl, setActiveStreamUrl] = useState('');
+  const [activeQuality, setActiveQuality] = useState('');
+  const [loadingStreams, setLoadingStreams] = useState(false);
+
+  // الترجمات (عربي + إنجليزي)
+  const [arabicSubUrl, setArabicSubUrl] = useState('');
+  const [englishSubUrl, setEnglishSubUrl] = useState('');
   const videoRef = useRef(null);
 
-  // 1️⃣ جلب تفاصيل المسلسل/الفيلم من TMDB باللغة الأصلية (en-US)
+  // 1️⃣ جلب تفاصيل الفيلم/المسلسل لمعرفة IMDb ID
   useEffect(() => {
-    if (!id) return;
+    if (!id || type === 'live') return;
 
-    async function fetchMetadata() {
-      const isTv = type === 'tv';
-      const finalType = isTv ? 'tv' : 'movie';
-
+    async function fetchDetails() {
+      const mediaType = type === 'tv' ? 'tv' : 'movie';
       try {
-        const res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
-        if (res.ok) {
-          const data = await res.json();
-          setMovieData(data);
+        const res = await fetch(`${TMDB_BASE_URL}/${mediaType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`);
+        const data = await res.json();
+        setDetails(data);
+
+        const fetchedImdbId = data.external_ids?.imdb_id || data.imdb_id;
+        setImdbId(fetchedImdbId);
+
+        if (mediaType === 'tv' && data.seasons) {
+          setSeasons(data.seasons.filter(s => s.season_number > 0));
         }
-      } catch (e) {
-        console.error("TMDB Fetch Error:", e);
+      } catch (err) {
+        console.error("Error fetching media details:", err);
       }
     }
 
-    fetchMetadata();
+    fetchDetails();
   }, [id, type]);
 
-  // 2️⃣ جلب حلقات الموسم باللغة الإنجليزية/الأصلية
+  // 2️⃣ جلب حلقات الموسم المحدد للمسلسلات
   useEffect(() => {
-    if (!id || (type !== 'tv' && movieData?.media_type_fixed !== 'tv')) return;
+    if (type !== 'tv' || !id || !selectedSeason) return;
 
-    async function fetchSeasonEpisodes() {
+    async function fetchEpisodes() {
       try {
-        const res = await fetch(`${TMDB_BASE_URL}/tv/${id}/season/${season}?api_key=${TMDB_API_KEY}&language=en-US`);
-        if (res.ok) {
-          const sData = await res.json();
-          if (sData.episodes) {
-            setEpisodesList(sData.episodes);
-          }
+        const res = await fetch(`${TMDB_BASE_URL}/tv/${id}/season/${selectedSeason}?api_key=${TMDB_API_KEY}`);
+        const data = await res.json();
+        setEpisodes(data.episodes || []);
+        if (data.episodes && data.episodes.length > 0) {
+          setSelectedEpisode(data.episodes[0].episode_number);
         }
-      } catch (e) {
-        console.error("Season Episodes Error:", e);
+      } catch (err) {
+        console.error("Error fetching episodes:", err);
       }
     }
 
-    fetchSeasonEpisodes();
-  }, [id, type, season, movieData]);
+    fetchEpisodes();
+  }, [id, type, selectedSeason]);
 
-  // 3️⃣ جلب روابط Real-Debrid
+  // 3️⃣ جلب روابط Real-Debrid وتصفيتها لتفادي بطء الفريمات
   useEffect(() => {
-    if (!id) return;
+    if (!imdbId && type !== 'live') return;
 
-    let isMounted = true;
+    async function fetchRDStreams() {
+      setLoadingStreams(true);
+      setStreams([]);
+      setActiveStreamUrl('');
 
-    async function fetchStreamData() {
-      setLoading(true);
-      setRdStatus('loading');
-      setErrorMessage('');
-
-      const isTv = type === 'tv' || movieData?.number_of_seasons > 0;
-      const finalType = isTv ? 'tv' : 'movie';
+      let endpoint = '';
+      if (type === 'tv') {
+        endpoint = `https://torrentio.strem.fun/stream/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`;
+      } else {
+        endpoint = `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
+      }
 
       try {
-        const imdbId = movieData?.external_ids?.imdb_id;
+        const res = await fetch(endpoint);
+        const data = await res.json();
+        if (data && data.streams && data.streams.length > 0) {
+          // ترتيب السيرفرات لتقديم H.264 لتشغيل سلس بدون تقطيع فريمات
+          const sortedStreams = [...data.streams].sort((a, b) => {
+            const titleA = (a.name + ' ' + (a.title || '')).toLowerCase();
+            const titleB = (b.name + ' ' + (b.title || '')).toLowerCase();
+            
+            const isHevcA = titleA.includes('hevc') || titleA.includes('h265') || titleA.includes('x265');
+            const isHevcB = titleB.includes('hevc') || titleB.includes('h265') || titleB.includes('x265');
 
-        if (imdbId) {
-          const queryTarget = isTv ? `${imdbId}:${season}:${episode}` : imdbId;
-          const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${queryTarget}.json`;
+            if (isHevcA && !isHevcB) return 1;
+            if (!isHevcA && isHevcB) return -1;
+            return 0;
+          });
 
-          const tRes = await fetch(torrentioUrl);
+          setStreams(sortedStreams);
+          const firstStream = sortedStreams[0];
+          const url = firstStream.url || (firstStream.infoHash ? `https://torrentio.strem.fun/realdebrid/${firstStream.infoHash}` : '');
+          setActiveStreamUrl(url);
+          setActiveQuality(firstStream.name || firstStream.title || 'Auto');
+        }
+      } catch (err) {
+        console.error("Error fetching RD streams:", err);
+      }
+      setLoadingStreams(false);
+    }
 
-          if (tRes.ok) {
-            const tData = await tRes.json();
-            if (tData?.streams?.length > 0) {
-              const validStreams = tData.streams.filter(s => s.url && s.url.startsWith('http'));
+    fetchRDStreams();
+  }, [imdbId, type, selectedSeason, selectedEpisode]);
 
-              const mappedQualities = [];
-              const seenLabels = new Set();
+  // 4️⃣ جلب الترجمات العربية والإنجليزية تلقائياً
+  useEffect(() => {
+    if (!imdbId) return;
 
-              const getQualityLabel = (stream) => {
-                const text = ((stream.title || '') + " " + (stream.name || '')).toLowerCase();
-                if (text.includes('4k') || text.includes('2160p')) return '4K';
-                if (text.includes('1440p') || text.includes('2k')) return '2K (1440p)';
-                if (text.includes('1080p')) return '1080p';
-                if (text.includes('720p')) return '720p';
-                return 'SD (أقل من 720p)';
-              };
+    async function fetchSubtitles() {
+      try {
+        let subEndpoint = `https://opensubtitles-v3.strem.fun/subtitles/movie/${imdbId}.json`;
+        if (type === 'tv') {
+          subEndpoint = `https://opensubtitles-v3.strem.fun/subtitles/series/${imdbId}:${selectedSeason}:${selectedEpisode}.json`;
+        }
 
-              validStreams.forEach(stream => {
-                const label = getQualityLabel(stream);
-                if (!seenLabels.has(label)) {
-                  seenLabels.add(label);
-                  mappedQualities.push({ label, url: stream.url });
-                }
-              });
+        const res = await fetch(subEndpoint);
+        const data = await res.json();
 
-              if (isMounted && mappedQualities.length > 0) {
-                setQualityOptions(mappedQualities);
-                setResolvedStreamUrl(mappedQualities[0].url);
-                setRdStatus('ready');
-                setActiveServer('debrid');
-                setLoading(false);
-                return;
-              }
-            }
+        if (data && data.subtitles) {
+          // البحث عن الترجمة العربية
+          const arabicSub = data.subtitles.find(s => s.lang === 'ara' || s.lang === 'ar');
+          if (arabicSub && arabicSub.url) {
+            setArabicSubUrl(arabicSub.url);
+          } else {
+            setArabicSubUrl('');
+          }
+
+          // البحث عن الترجمة الإنجليزية
+          const englishSub = data.subtitles.find(s => s.lang === 'eng' || s.lang === 'en');
+          if (englishSub && englishSub.url) {
+            setEnglishSubUrl(englishSub.url);
+          } else {
+            setEnglishSubUrl('');
           }
         }
       } catch (err) {
-        console.error("Stream Fetch Error:", err);
-      }
-
-      if (isMounted) {
-        setRdStatus('failed');
-        setErrorMessage('تعذر العثور على رابط Real-Debrid.');
-        setActiveServer('vidsrc_cc');
-        setLoading(false);
+        console.error("Subtitles fetch error:", err);
+        setArabicSubUrl('');
+        setEnglishSubUrl('');
       }
     }
 
-    if (movieData) {
-      fetchStreamData();
-    }
+    fetchSubtitles();
+  }, [imdbId, type, selectedSeason, selectedEpisode]);
 
-    return () => { isMounted = false; };
-  }, [id, type, season, episode, movieData]);
-
-  if (loading && !movieData) {
-    return (
-      <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 Loading...</h3>
-      </div>
-    );
-  }
-
-  const isTvShow = (type === 'tv' || movieData?.number_of_seasons > 0);
-  const displayTitle = movieData ? (movieData.title || movieData.name) : 'Watch Now 📺';
-
-  const embedUrl = isTvShow 
-    ? `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`
-    : `https://vidsrc.cc/v2/embed/movie/${id}`;
-
-  const servers = {
-    vidsrc_cc: embedUrl,
-    vidsrc_to: isTvShow ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}` : `https://vidsrc.to/embed/movie/${id}`,
-    vidlink: isTvShow ? `https://vidlink.pro/embed/tv/${id}/${season}/${episode}` : `https://vidlink.pro/embed/movie/${id}`,
+  const handleSelectStream = (stream) => {
+    const url = stream.url || (stream.infoHash ? `https://torrentio.strem.fun/realdebrid/${stream.infoHash}` : '');
+    setActiveStreamUrl(url);
+    setActiveQuality(stream.name || stream.title || 'Selected');
   };
 
   return (
-    <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl', boxSizing: 'border-box' }}>
+    <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px' }}>
       <Head>
-        <title>{displayTitle} - SimplStream</title>
-        {/* إخفاء وتغميق شريط التمرير والحواف البيضاء */}
-        <style>{`
-          html, body {
-            background-color: #050505 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow-x: hidden;
-          }
-          ::-webkit-scrollbar {
-            width: 8px;
-          }
-          ::-webkit-scrollbar-track {
-            background: #050505;
-          }
-          ::-webkit-scrollbar-thumb {
-            background: #222;
-            border-radius: 4px;
-          }
-          ::-webkit-scrollbar-thumb:hover {
-            background: #e50914;
-          }
-        `}</style>
+        <title>{details ? (details.title || details.name) : 'Player'} - CINEMA MATRIX</title>
       </Head>
 
-      <button onClick={() => router.push('/')} style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px' }}>
-        ← العودة للرئيسية
-      </button>
+      {/* الهيدر وزر العودة */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <button 
+          onClick={() => router.back()} 
+          style={{ backgroundColor: '#111', color: 'white', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          ← Back
+        </button>
+        <h1 style={{ color: '#e50914', margin: 0, fontSize: '22px' }}>
+          {details ? (details.title || details.name) : 'Live Stream'}
+        </h1>
+      </div>
 
-      {movieData && (
-        <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', marginBottom: '20px' }}>
-          <img src={movieData.poster_path ? `https://image.tmdb.org/t/p/w300${movieData.poster_path}` : 'https://via.placeholder.com/300x450'} alt={displayTitle} style={{ borderRadius: '12px', width: '220px', objectFit: 'cover' }} />
-          <div style={{ flex: 1, minWidth: '300px' }}>
-            <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
-            <p style={{ color: '#aaa', fontSize: '14px' }}>Release Date: {movieData.release_date || movieData.first_air_date} | ⭐ {movieData.vote_average?.toFixed(1)}</p>
+      {/* مشغل الفيديو الرئيسي */}
+      <div style={{ width: '100%', height: '65vh', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', marginBottom: '20px' }}>
+        {type === 'live' ? (
+          <iframe 
+            src="https://vidsrc.me/embed/tv" 
+            style={{ width: '100%', height: '100%', border: 'none' }} 
+            allowFullScreen 
+          />
+        ) : activeStreamUrl ? (
+          <video 
+            key={activeStreamUrl}
+            ref={videoRef}
+            controls 
+            autoPlay 
+            playsInline 
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          >
+            <source src={activeStreamUrl} type="video/mp4" />
             
-            <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderRight: '4px solid #e50914', fontSize: '13px', color: '#e50914', fontWeight: 'bold' }}>
-              حقوق النشر والتشغيل محفوظة لـ: Anonymous
-            </div>
-            
-            <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>{movieData.overview || "No description available."}</p>
+            {/* 🔴 مسار الترجمة العربية */}
+            {arabicSubUrl && (
+              <track 
+                kind="subtitles" 
+                src={arabicSubUrl} 
+                srcLang="ar" 
+                label="العربية (Arabic)" 
+                default 
+              />
+            )}
+
+            {/* 🔵 مسار الترجمة الإنجليزية */}
+            {englishSubUrl && (
+              <track 
+                kind="subtitles" 
+                src={englishSubUrl} 
+                srcLang="en" 
+                label="English" 
+              />
+            )}
+            Your browser does not support HTML5 video.
+          </video>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
+            {loadingStreams ? 'Loading Streams & Subtitles...' : 'No stream available. Select a quality below.'}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* 📺 اختيار الموسم والحلقة للمسلسلات */}
-      {isTvShow && (
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222', alignItems: 'center' }}>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 'bold', color: '#e50914' }}>📅 Season:</span>
+      {/* التحكم بالمواسم والحلقات للمسلسلات */}
+      {type === 'tv' && seasons.length > 0 && (
+        <div style={{ marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
+          <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ fontWeight: 'bold', color: '#e50914' }}>Season:</label>
             <select 
-              value={season} 
-              onChange={(e) => {
-                setSeason(Number(e.target.value));
-                setEpisode(1);
-              }}
-              style={{ padding: '8px 12px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+              value={selectedSeason} 
+              onChange={(e) => setSelectedSeason(Number(e.target.value))}
+              style={{ backgroundColor: '#141414', color: 'white', border: '1px solid #333', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer' }}
             >
-              {Array.from({ length: movieData?.number_of_seasons || 1 }, (_, i) => i + 1).map((sNum) => (
-                <option key={sNum} value={sNum}>
-                  Season {sNum}
-                </option>
+              {seasons.map(s => (
+                <option key={s.id} value={s.season_number}>{s.name || `Season ${s.season_number}`}</option>
               ))}
             </select>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 Episode:</span>
-            <select 
-              value={episode} 
-              onChange={(e) => setEpisode(Number(e.target.value))}
-              style={{ padding: '8px 12px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-            >
-              {episodesList.length > 0 ? (
-                episodesList.map((ep) => (
-                  <option key={ep.episode_number} value={ep.episode_number}>
-                    Episode {ep.episode_number} - {ep.name || `Episode ${ep.episode_number}`}
-                  </option>
-                ))
-              ) : (
-                <option value={1}>Episode 1</option>
-              )}
-            </select>
-          </div>
-
-        </div>
-      )}
-
-      {/* 🎬 اختيار الجودة */}
-      {activeServer === 'debrid' && qualityOptions.length > 0 && (
-        <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px 18px', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 'bold', color: '#e50914' }}>⚙️ Quality:</span>
-          <select 
-            value={resolvedStreamUrl}
-            onChange={(e) => {
-              const newUrl = e.target.value;
-              setResolvedStreamUrl(newUrl);
-              if (videoRef.current) {
-                videoRef.current.src = newUrl;
-                videoRef.current.play();
-              }
-            }}
-            style={{ padding: '8px 16px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', outline: 'none' }}
-          >
-            {qualityOptions.map((q, idx) => (
-              <option key={idx} value={q.url}>
-                {q.label}
-              </option>
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '10px' }}>
+            {episodes.map(e => (
+              <button 
+                key={e.id}
+                onClick={() => setSelectedEpisode(e.episode_number)}
+                style={{ 
+                  backgroundColor: selectedEpisode === e.episode_number ? '#e50914' : '#141414', 
+                  color: 'white', 
+                  border: '1px solid #333', 
+                  padding: '8px 14px', 
+                  borderRadius: '6px', 
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                E{e.episode_number}: {e.name}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
       )}
 
-      {/* أزرار السيرفرات */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
-        <button 
-          onClick={() => setActiveServer('debrid')}
-          disabled={rdStatus !== 'ready'}
-          style={{
-            padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', 
-            cursor: rdStatus === 'ready' ? 'pointer' : 'not-allowed',
-            backgroundColor: activeServer === 'debrid' ? '#e50914' : '#111',
-            color: rdStatus === 'ready' ? '#fff' : '#666',
-            border: '1px solid #333'
-          }}
-        >
-          💎 Premium {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
-        </button>
-        
-        <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
-        <button onClick={() => setActiveServer('vidsrc_to')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_to' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 2</button>
-        <button onClick={() => setActiveServer('vidlink')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidlink' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 3</button>
-      </div>
+      {/* اختيارات الجودة وسيرفرات Real-Debrid المتاحة */}
+      {type !== 'live' && (
+        <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#aaa' }}>
+            Available Qualities & Servers:
+          </h3>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {streams.map((stream, idx) => {
+              const qualityLabel = stream.name || stream.title || `Server ${idx + 1}`;
+              const isSelected = activeQuality === qualityLabel;
 
-      {/* منطقة المشغل */}
-      <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
-        <div style={{ position: 'relative', width: '100%', minHeight: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-          {activeServer === 'debrid' && resolvedStreamUrl ? (
-            <video 
-              ref={videoRef}
-              controls 
-              autoPlay
-              playsInline 
-              style={{ width: '100%', height: '60vh', borderRadius: '8px', backgroundColor: '#000' }}
-            >
-              <source src={resolvedStreamUrl} />
-            </video>
-          ) : (
-            <iframe 
-              src={servers[activeServer]} 
-              style={{ width: '100%', height: '65vh', border: 'none' }} 
-              allowFullScreen 
-              allow="autoplay; encrypted-media; picture-in-picture"
-            />
-          )}
+              return (
+                <button
+                  key={idx}
+                  onClick={() => handleSelectStream(stream)}
+                  style={{
+                    backgroundColor: isSelected ? '#e50914' : '#141414',
+                    color: 'white',
+                    border: '1px solid #333',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {qualityLabel}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
