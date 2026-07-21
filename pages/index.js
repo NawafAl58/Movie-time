@@ -164,7 +164,7 @@ export default function Home({ initialMovies, initialShows }) {
               tabIndex="0" 
               className="btn-tv-focusable" 
               onClick={() => router.push('/movie/iptv-custom-live?type=live')} 
-              style={{ backgroundColor: '#e50914', color: 'white', border: 'none', padding: '10px 20px', fontSize: '15px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}
+              style={{ backgroundColor: '#141414', color: 'white', border: 'none', padding: '10px 20px', fontSize: '15px', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer' }}
             >
               {lang === 'ar' ? '🔴 البث المباشر' : '🔴 Live TV'}
             </button>
