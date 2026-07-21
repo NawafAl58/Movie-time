@@ -33,7 +33,6 @@ export default function MoviePlayer() {
         const data = await res.json();
         setMovie(data);
         
-        // Fetch Arabic Subtitles via OpenSubtitles/Stremio Subtitles API
         if (data.imdb_id) {
           fetchSubtitles(data.imdb_id);
         }
@@ -49,14 +48,13 @@ export default function MoviePlayer() {
     fetchMovieDetails();
   }, [id]);
 
-  // Public Free Arabic Subtitles Fetcher
+  // Arabic Subtitles Fetcher
   async function fetchSubtitles(imdbId) {
     try {
       const subRes = await fetch(`https://v3-cinemeta.strem.fun/subtitles/movie/${imdbId}.json`);
       if (subRes.ok) {
         const subData = await subRes.json();
         if (subData.subtitles && subData.subtitles.length > 0) {
-          // البحث عن الترجمة العربية
           const arSub = subData.subtitles.find(
             (s) => s.lang === 'ara' || s.lang === 'ar' || s.id?.includes('ara')
           );
@@ -70,7 +68,7 @@ export default function MoviePlayer() {
     }
   }
 
-  // 2. Fetch Compatible Web Streams
+  // 2. Fetch Clean Single-Movie Streams Only
   async function fetchStreams(imdbId) {
     try {
       setStatusText('Finding web-compatible servers...');
@@ -80,8 +78,15 @@ export default function MoviePlayer() {
       const data = await res.json();
 
       if (data.streams && data.streams.length > 0) {
-        setStreams(data.streams);
-        handleSelectStream(data.streams[0], 0, data.streams);
+        // فلترة النسخ التي تحتوي على حزم كاملة أو أكياس تسبب مشاكل
+        const cleanStreams = data.streams.filter(s => {
+          const title = (s.title || s.name || '').toLowerCase();
+          return !title.includes('pack') && !title.includes('collection') && !title.includes('nominees');
+        });
+
+        const finalStreamsList = cleanStreams.length > 0 ? cleanStreams : data.streams;
+        setStreams(finalStreamsList);
+        handleSelectStream(finalStreamsList[0], 0, finalStreamsList);
       } else {
         setStatusText('No streams found for this title.');
         setLoading(false);
@@ -93,13 +98,13 @@ export default function MoviePlayer() {
     }
   }
 
-  // 3. Unrestrict Link
-  async function handleSelectStream(stream, currentIndex = 0, currentStreamsList = streams) {
+  // 3. Unrestrict Link (Limited Retries to Prevent Rate Limit)
+  async function handleSelectStream(stream, currentIndex = 0, currentStreamsList = streams, retryCount = 0) {
     const listToUse = currentStreamsList.length > 0 ? currentStreamsList : streams;
     setSelectedStream(stream);
     setLoading(true);
     setVideoSrc('');
-    setStatusText(`Connecting to server ${currentIndex + 1} of ${listToUse.length}...`);
+    setStatusText(`Connecting to server ${currentIndex + 1}...`);
 
     try {
       let rawStreamLink = stream.url || stream.externalUrl;
@@ -116,14 +121,15 @@ export default function MoviePlayer() {
       const data = await res.json();
 
       if (!res.ok) {
-        if (currentIndex + 1 < listToUse.length) {
-          setStatusText(`Server ${currentIndex + 1} unavailable. Testing server ${currentIndex + 2}...`);
+        // تجربة بحد أقصى 3 سيرفرات متتالية فقط لتجنب الـ Rate Limit
+        if (retryCount < 2 && currentIndex + 1 < listToUse.length) {
+          setStatusText(`Server ${currentIndex + 1} unavailable. Trying next server...`);
           setTimeout(() => {
-            handleSelectStream(listToUse[currentIndex + 1], currentIndex + 1, listToUse);
-          }, 600); // إعطاء مهلة لتجنب الـ Rate Limit
+            handleSelectStream(listToUse[currentIndex + 1], currentIndex + 1, listToUse, retryCount + 1);
+          }, 1500); // مهلة 1.5 ثانية للـ API
           return;
         } else {
-          throw new Error('All available servers for this movie are currently blocked.');
+          throw new Error('Server unavailable. Please manually select another server below.');
         }
       }
 
@@ -202,7 +208,6 @@ export default function MoviePlayer() {
               playsInline
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             >
-              {/* Arabic Subtitles Track */}
               {subtitleSrc && (
                 <track
                   kind="subtitles"
@@ -216,7 +221,7 @@ export default function MoviePlayer() {
           )}
         </div>
 
-        {/* External Player Fallback Buttons */}
+        {/* External Player Buttons */}
         {!loading && videoSrc && (
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '20px' }}>
             <a
@@ -246,7 +251,7 @@ export default function MoviePlayer() {
               return (
                 <button
                   key={idx}
-                  onClick={() => handleSelectStream(stream, idx, streams)}
+                  onClick={() => handleSelectStream(stream, idx, streams, 0)}
                   style={{
                     backgroundColor: isSelected ? '#e50914' : '#181818',
                     color: isSelected ? '#fff' : '#aaa',
