@@ -1,5 +1,6 @@
+// pages/login.js
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 
@@ -29,8 +30,12 @@ export default function AuthPage() {
   }, []);
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from('profiles').select('avatar_url').eq('id', userId).single();
-    if (data?.avatar_url) setSelectedAvatar(data.avatar_url);
+    try {
+      const { data } = await supabase.from('profiles').select('avatar_url').eq('id', userId).single();
+      if (data?.avatar_url) setSelectedAvatar(data.avatar_url);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   const handleAuth = async (isSignUp) => {
@@ -42,25 +47,29 @@ export default function AuthPage() {
     setLoading(true);
     setMsg('');
 
-    const { data, error } = isSignUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const { data, error } = isSignUp
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      setMsg(error.message);
-    } else {
-      const activeUser = data?.user;
-      if (activeUser && isSignUp) {
-        await supabase.from('profiles').upsert({ id: activeUser.id, avatar_url: selectedAvatar });
+      if (error) {
+        setMsg(error.message);
+      } else {
+        const activeUser = data?.user;
+        if (activeUser && isSignUp) {
+          await supabase.from('profiles').upsert({ id: activeUser.id, avatar_url: selectedAvatar });
+        }
+        router.push('/');
       }
-      router.push('/');
+    } catch (err) {
+      setMsg('حدث خطأ في الاتصال');
     }
     setLoading(false);
   };
 
   return (
     <div style={{ backgroundColor: '#0a0a0a', color: '#fff', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui', padding: '20px' }}>
-      <Head><title>Cinematrix - تسجيل الدخول الإجباري</title></Head>
+      <Head><title>Cinematrix - تسجيل الدخول</title></Head>
 
       <div style={{ backgroundColor: '#141414', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '400px', border: '1px solid #222' }}>
         <h1 style={{ color: '#e50914', textAlign: 'center', fontSize: '28px', fontWeight: '900', marginBottom: '5px' }}>CINEMATRIX</h1>
