@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import Navbar from '../components/Navbar';
 
-const API_KEY = 'fe4b6ec1a6183fddf681565506956216'; 
+const API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY || 'fe4b6ec1a6183fddf681565506956216'; 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_URL = 'https://image.tmdb.org/t/p/w300'; 
 
-// خريطة الـ Slug لتوجيه التصفح لصفحات مستقلة
+// خريطة التصنيفات للـ Navigation
 const GENRES_EN = [
   { id: 'all', slug: 'all', name: 'Trending 🔥' },
   { id: 'arabic', slug: 'arabic', name: 'Arabic 🇸🇦' }, 
@@ -109,7 +110,6 @@ export default function Home({ initialMovies, initialShows }) {
     if (genre.slug === 'all') {
       return;
     }
-    // التوجيه لصفحة التصنيف المخصصة
     router.push(`/category/${genre.slug}?type=${activeTab}`);
   };
 
@@ -125,7 +125,7 @@ export default function Home({ initialMovies, initialShows }) {
   }
 
   return (
-    <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', padding: '20px', direction: lang === 'ar' ? 'rtl' : 'ltr', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ backgroundColor: '#050505', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif', direction: lang === 'ar' ? 'rtl' : 'ltr', display: 'flex', flexDirection: 'column' }}>
       
       <style jsx global>{`
         html, body, #__next { margin: 0 !important; padding: 0 !important; background-color: #050505 !important; background: #050505 !important; }
@@ -133,14 +133,11 @@ export default function Home({ initialMovies, initialShows }) {
         .btn-tv-focusable:focus { outline: none !important; background-color: #e50914 !important; color: white !important; transform: scale(1.1) !important; box-shadow: 0 0 10px #e50914; }
       `}</style>
 
-      <div style={{ flex: 1 }}>
+      {/* الشريط العلوي الموحد للحسابات والأفاتار */}
+      <Navbar />
+
+      <div style={{ flex: 1, padding: '20px' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '15px', borderBottom: '2px solid #111', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-          <div>
-            <h1 style={{ color: '#e50914', fontSize: '30px', fontWeight: '900', letterSpacing: '2px', margin: 0 }}>CINEMA MATRIX</h1>
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '2px', fontWeight: 'bold', letterSpacing: '1px' }}>
-              BY: Anonymous
-            </div>
-          </div>
           
           <div style={{ display: 'flex', gap: '5px', backgroundColor: '#141414', padding: '4px', borderRadius: '20px', border: '1px solid #222' }}>
             <button className="btn-tv-focusable" onClick={() => toggleLanguage('en')} style={{ padding: '6px 15px', fontSize: '12px', fontWeight: 'bold', borderRadius: '15px', border: 'none', cursor: 'pointer', backgroundColor: lang === 'en' ? '#e50914' : 'transparent', color: 'white' }}>English</button>
@@ -178,7 +175,7 @@ export default function Home({ initialMovies, initialShows }) {
           </div>
         </header>
 
-        {/* أزرار التصنيف بنظام الصفحات المستقلة */}
+        {/* أزرار التصنيف */}
         <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '25px', scrollbarWidth: 'none' }}>
           {genresList.map((genre) => (
             <button
