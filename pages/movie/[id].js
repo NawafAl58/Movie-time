@@ -33,7 +33,7 @@ export default function MoviePlayerPage() {
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
   const [loadingStreams, setLoadingStreams] = useState(false);
 
-  // الترجمات (روابط Blob محلية آمنة للمتصفح)
+  // الترجمات
   const [arabicSubBlob, setArabicSubBlob] = useState('');
   const [englishSubBlob, setEnglishSubBlob] = useState('');
 
@@ -87,7 +87,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب السيرفرات المفلترة
+  // 3️⃣ جلب أسرع سيرفرات المتاحة
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
@@ -126,18 +126,16 @@ export default function MoviePlayerPage() {
     fetchRDStreams();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب الترجمات وتجاوز حظر CORS وتحويلها لـ WebVTT Blob
+  // 4️⃣ جلب الترجمة وتجاوز حظر CORS مع تحويلها لـ WebVTT
   useEffect(() => {
     if (!imdbId) return;
 
     async function loadAndConvertSubtitle(url, setBlobFn) {
       try {
-        // تحويل مسار الترجمة عبر proxy لتجاوز CORS
         const corsProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
         const res = await fetch(corsProxyUrl);
         let text = await res.text();
 
-        // التأكد من وجود ترقيم WebVTT في بداية الملف
         if (!text.startsWith('WEBVTT')) {
           text = 'WEBVTT\n\n' + text.replace(/(\d\d:\d\d:\d\d),(\d\d\d)/g, '$1.$2');
         }
@@ -186,6 +184,20 @@ export default function MoviePlayerPage() {
       <Head>
         <title>{details ? (details.title || details.name) : 'Player'} - CINEMA MATRIX</title>
       </Head>
+
+      {/* 🎨 إصلاح الحواف والظلال البيضاء للترجمة لجعلها مظللة وواضحة */}
+      <style jsx global>{`
+        video::cue {
+          background-color: rgba(0, 0, 0, 0.78) !important;
+          color: #ffffff !important;
+          font-family: system-ui, -apple-system, sans-serif !important;
+          font-size: 1.15rem !important;
+          font-weight: 600 !important;
+          text-shadow: none !important;
+          padding: 4px 10px !important;
+          border-radius: 4px !important;
+        }
+      `}</style>
 
       {/* الهيدر */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
@@ -285,7 +297,7 @@ export default function MoviePlayerPage() {
         </div>
       )}
 
-      {/* قائمة السيرفرات */}
+      {/* قائمة السيرفرات السريعة */}
       {mediaType !== 'live' && streams.length > 0 && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#aaa' }}>
