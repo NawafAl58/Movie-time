@@ -9,7 +9,6 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 // 🔑 API Key الخاص بك في Real-Debrid
 const RD_API_KEY = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
-// 🎯 إعدادات Torrentio لتصفيات الجودة (استبعاد الجودات الرديئة واستبعاد الملفات الضخمة جداً)
 const TORRENTIO_CONFIG = 'sort=qualitysize|qualityfilter=scr,cam,3d';
 const TORRENTIO_BASE_URL = `https://torrentio.strem.fun/${TORRENTIO_CONFIG}|realdebrid=${RD_API_KEY}`;
 
@@ -34,15 +33,15 @@ export default function MoviePlayerPage() {
   const [activeStreamUrl, setActiveStreamUrl] = useState('');
   const [loadingStreams, setLoadingStreams] = useState(false);
 
-  // الترجمات
-  const [arabicSub, setArabicSub] = useState('');
-  const [englishSub, setEnglishSub] = useState('');
+  // الترجمات (روابط Blob محلية آمنة للمتصفح)
+  const [arabicSubBlob, setArabicSubBlob] = useState('');
+  const [englishSubBlob, setEnglishSubBlob] = useState('');
 
   useEffect(() => {
     if (type) setMediaType(type === 'tv' ? 'tv' : 'movie');
   }, [type]);
 
-  // 1️⃣ جلب تفاصيل المادة من TMDB
+  // 1️⃣ جلب تفاصيل TMDB
   useEffect(() => {
     if (!id || mediaType === 'live') return;
 
@@ -68,7 +67,7 @@ export default function MoviePlayerPage() {
     fetchDetails();
   }, [id, mediaType]);
 
-  // 2️⃣ جلب حلقات المسلسلات
+  // 2️⃣ جلب حلقات المسلسل
   useEffect(() => {
     if (mediaType !== 'tv' || !id || !selectedSeason) return;
 
@@ -88,7 +87,7 @@ export default function MoviePlayerPage() {
     fetchEpisodes();
   }, [id, mediaType, selectedSeason]);
 
-  // 3️⃣ جلب السيرفرات المفلترة (أقصى حد 8 سيرفرات ممتازة)
+  // 3️⃣ جلب السيرفرات المفلترة
   useEffect(() => {
     if (!imdbId && mediaType !== 'live') return;
 
@@ -106,11 +105,9 @@ export default function MoviePlayerPage() {
         const data = await res.json();
 
         if (data && data.streams && data.streams.length > 0) {
-          // 🧹 تصفية قائمة السيرفرات وتحديدها بـ 8 سيرفرات فقط
           const cleanStreams = data.streams
             .filter(s => s.url || s.externalUrl)
-            // نفضل السيرفرات المتوافقة بـ MP4 / H264
-            .slice(0, 8); 
+            .slice(0, 8);
 
           setStreams(cleanStreams);
 
@@ -129,9 +126,29 @@ export default function MoviePlayerPage() {
     fetchRDStreams();
   }, [imdbId, mediaType, selectedSeason, selectedEpisode]);
 
-  // 4️⃣ جلب الترجمات
+  // 4️⃣ جلب الترجمات وتجاوز حظر CORS وتحويلها لـ WebVTT Blob
   useEffect(() => {
     if (!imdbId) return;
+
+    async function loadAndConvertSubtitle(url, setBlobFn) {
+      try {
+        // تحويل مسار الترجمة عبر proxy لتجاوز CORS
+        const corsProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        const res = await fetch(corsProxyUrl);
+        let text = await res.text();
+
+        // التأكد من وجود ترقيم WebVTT في بداية الملف
+        if (!text.startsWith('WEBVTT')) {
+          text = 'WEBVTT\n\n' + text.replace(/(\d\d:\d\d:\d\d),(\d\d\d)/g, '$1.$2');
+        }
+
+        const blob = new Blob([text], { type: 'text/vtt;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        setBlobFn(blobUrl);
+      } catch (err) {
+        console.warn("Subtitle load failed:", err);
+      }
+    }
 
     async function fetchSubtitles() {
       try {
@@ -147,8 +164,8 @@ export default function MoviePlayerPage() {
           const ar = data.subtitles.find(s => s.lang === 'ara' || s.lang === 'ar');
           const en = data.subtitles.find(s => s.lang === 'eng' || s.lang === 'en');
 
-          setArabicSub(ar?.url || '');
-          setEnglishSub(en?.url || '');
+          if (ar?.url) loadAndConvertSubtitle(ar.url, setArabicSubBlob);
+          if (en?.url) loadAndConvertSubtitle(en.url, setEnglishSubBlob);
         }
       } catch (err) {
         console.warn("Subtitles fetch warning:", err);
@@ -202,20 +219,20 @@ export default function MoviePlayerPage() {
           >
             <source src={activeStreamUrl} type="video/mp4" />
             
-            {arabicSub && (
+            {arabicSubBlob && (
               <track 
                 kind="subtitles" 
-                src={arabicSub} 
+                src={arabicSubBlob} 
                 srcLang="ar" 
                 label="العربية (Arabic)" 
                 default 
               />
             )}
 
-            {englishSub && (
+            {englishSubBlob && (
               <track 
                 kind="subtitles" 
-                src={englishSub} 
+                src={englishSubBlob} 
                 srcLang="en" 
                 label="English" 
               />
@@ -224,7 +241,7 @@ export default function MoviePlayerPage() {
           </video>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>
-            {loadingStreams ? 'Loading Best Real-Debrid Streams...' : 'No Stream Loaded.'}
+            {loadingStreams ? 'Loading Streams...' : 'No Stream Loaded.'}
           </div>
         )}
       </div>
@@ -268,7 +285,7 @@ export default function MoviePlayerPage() {
         </div>
       )}
 
-      {/* قائمة السيرفرات (المختارة بدقة) */}
+      {/* قائمة السيرفرات */}
       {mediaType !== 'live' && streams.length > 0 && (
         <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '10px', border: '1px solid #222' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#aaa' }}>
