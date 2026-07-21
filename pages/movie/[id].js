@@ -1,9 +1,9 @@
-// pages/movie/[id].js أو pages/[id].js
+// pages/movie/[id].js
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import Navbar from '@/components/Navbar';
-import { supabase } from '@/lib/supabaseClient';
+import Navbar from '../../components/Navbar';
+import { supabase } from '../../lib/supabaseClient';
 
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY || 'fe4b6ec1a6183fddf681565506956216'; 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
