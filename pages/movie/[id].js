@@ -14,7 +14,7 @@ export default function MovieDetail() {
   
   const [movieData, setMovieData] = useState(null);
   const [resolvedStreamUrl, setResolvedStreamUrl] = useState('');
-  const [availableStreams, setAvailableStreams] = useState([]);
+  const [qualityOptions, setQualityOptions] = useState([]);
   const [rdStatus, setRdStatus] = useState('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [activeServer, setActiveServer] = useState('debrid');
@@ -26,7 +26,7 @@ export default function MovieDetail() {
 
   const videoRef = useRef(null);
 
-  // تحميل مكتبة Plyr ديناميكياً للتحكم بالترجمة والجودة
+  // تحميل مشغل Plyr
   useEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
@@ -83,7 +83,6 @@ export default function MovieDetail() {
         try {
           const queryTarget = finalType === 'tv' ? `${imdbId}:${season}:${episode}` : imdbId;
 
-          // طلب Torrentio المباشر مع Real-Debrid
           const torrentioUrl = `https://torrentio.strem.fun/realdebrid=${DEBRID_API_TOKEN}/stream/${finalType}/${queryTarget}.json`;
           const tRes = await fetch(torrentioUrl);
           
@@ -92,17 +91,32 @@ export default function MovieDetail() {
             
             if (tData && tData.streams && tData.streams.length > 0) {
               const validStreams = tData.streams.filter(s => s.url && s.url.startsWith('http'));
-              setAvailableStreams(validStreams);
 
-              // اختيار أعلى جودة سريعة افتراضياً
-              const bestStream = 
-                validStreams.find(s => s.title?.includes('4K') || s.name?.includes('4K') || s.title?.includes('2160p')) ||
-                validStreams.find(s => (s.title?.includes('1080p') || s.name?.includes('1080p')) && (s.title?.includes('x264') || s.name?.includes('x264'))) ||
-                validStreams.find(s => s.title?.includes('1080p') || s.name?.includes('1080p')) ||
-                validStreams[0];
+              // تجميع وتنظيف الروابط حسب الجودة فقط (4K, 2K, 1080p, 720p, SD)
+              const mappedQualities = [];
+              const seenLabels = new Set();
 
-              if (bestStream && bestStream.url) {
-                setResolvedStreamUrl(bestStream.url);
+              const getQualityLabel = (stream) => {
+                const text = (stream.title + " " + stream.name).toLowerCase();
+                if (text.includes('4k') || text.includes('2160p')) return '4K';
+                if (text.includes('1440p') || text.includes('2k')) return '2K (1440p)';
+                if (text.includes('1080p')) return '1080p';
+                if (text.includes('720p')) return '720p';
+                return 'أقل من 720p (SD)';
+              };
+
+              validStreams.forEach(stream => {
+                const label = getQualityLabel(stream);
+                if (!seenLabels.has(label)) {
+                  seenLabels.add(label);
+                  mappedQualities.push({ label, url: stream.url });
+                }
+              });
+
+              setQualityOptions(mappedQualities);
+
+              if (mappedQualities.length > 0) {
+                setResolvedStreamUrl(mappedQualities[0].url);
                 setRdStatus('ready');
                 setActiveServer('debrid');
                 setLoading(false);
@@ -135,7 +149,7 @@ export default function MovieDetail() {
   if (loading) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل المشغل المطور...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري تحميل الفيديو بأفضل جودة...</h3>
       </div>
     );
   }
@@ -170,15 +184,18 @@ export default function MovieDetail() {
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h1 style={{ fontSize: '36px', color: '#e50914', margin: '0 0 10px 0', fontWeight: 'bold' }}>{displayTitle}</h1>
             <p style={{ color: '#aaa', fontSize: '14px' }}>تاريخ الإصدار: {movieData.release_date || movieData.first_air_date} | ⭐ {movieData.vote_average?.toFixed(1)}</p>
+            
+            {/* الحقوق باسم Anonymous */}
             <div style={{ margin: '15px 0', padding: '10px 15px', backgroundColor: '#111', borderRight: '4px solid #e50914', fontSize: '13px', color: '#e50914', fontWeight: 'bold' }}>
-              حقوق النشر والتشغيل محفوظة لـ: نواف النزاوي
+              حقوق النشر والتشغيل محفوظة لـ: Anonymous
             </div>
+            
             <p style={{ fontSize: '16px', lineHeight: '1.6', marginTop: '10px', color: '#ddd' }}>{movieData.overview || "لا يوجد وصف متاح حالياً."}</p>
           </div>
         </div>
       )}
 
-      {/* اختيار الموسم والحلقة عند تشغيل مسلسل */}
+      {/* اختيار الموسم والحلقة للمسلسلات */}
       {isTvShow && (
         <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222', alignItems: 'center' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
@@ -204,24 +221,25 @@ export default function MovieDetail() {
         </div>
       )}
 
-      {/* خيارات تغيير الجودة والسيرفرات من Real-Debrid */}
-      {activeServer === 'debrid' && availableStreams.length > 1 && (
-        <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
-          <span style={{ fontWeight: 'bold', marginLeft: '10px', color: '#e50914' }}>🎥 اختر الجودة / المصدر المفضل:</span>
+      {/* قائمة اختيار الجودة المحددة والواضحة */}
+      {activeServer === 'debrid' && qualityOptions.length > 0 && (
+        <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px 18px', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 اختر الجودة:</span>
           <select 
+            value={resolvedStreamUrl}
             onChange={(e) => setResolvedStreamUrl(e.target.value)}
-            style={{ padding: '8px 12px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer' }}
+            style={{ padding: '8px 16px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
           >
-            {availableStreams.map((st, idx) => (
-              <option key={idx} value={st.url}>
-                {st.title ? st.title.split('\n')[0] : `سيرفر Real-Debrid ${idx + 1}`}
+            {qualityOptions.map((q, idx) => (
+              <option key={idx} value={q.url}>
+                {q.label}
               </option>
             ))}
           </select>
         </div>
       )}
 
-      {/* أزرار اختيار السيرفر */}
+      {/* أزرار السيرفرات */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
         <button 
           onClick={() => setActiveServer('debrid')}
@@ -234,7 +252,7 @@ export default function MovieDetail() {
             border: '1px solid #333'
           }}
         >
-          💎 Real-Debrid الأصيل (مشغل Plyr المطور 🛡️) {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
+          💎 Real-Debrid الأصيل (بدون إعلانات 🛡️) {rdStatus === 'failed' && `(${errorMessage || 'غير متاح'})`}
         </button>
         
         <button onClick={() => setActiveServer('vidsrc_cc')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidsrc_cc' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 1</button>
@@ -255,7 +273,6 @@ export default function MovieDetail() {
               style={{ width: '100%', height: '100%' }}
             >
               <source src={resolvedStreamUrl} />
-              {/* تفعيل مسار الترجمات في المشغل */}
               <track kind="captions" label="العربية" srcLang="ar" default />
             </video>
           ) : (
