@@ -7,81 +7,6 @@ const TMDB_API_KEY = 'fe4b6ec1a6183fddf681565506956216';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const DEBRID_API_TOKEN = 'O5H7M7ITDE3LJ63T3QXHTROL4VAZKYRL47HSTSQGNW4DD6B4XE2Q';
 
-// 🛡️ مكون المشغل المعزول لمنع أخطاء DOM و removeChild Error
-function CustomPlayer({ url }) {
-  const videoRef = useRef(null);
-  const playerInstanceRef = useRef(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    // تحميل CSS الخاص بـ Plyr
-    if (!document.getElementById('plyr-css')) {
-      const link = document.createElement('link');
-      link.id = 'plyr-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.plyr.io/3.7.8/plyr.css';
-      document.head.appendChild(link);
-    }
-
-    const initPlyr = () => {
-      if (videoRef.current && window.Plyr && isMounted) {
-        try {
-          if (playerInstanceRef.current) {
-            playerInstanceRef.current.destroy();
-          }
-          playerInstanceRef.current = new window.Plyr(videoRef.current, {
-            controls: [
-              'play-large', 'play', 'progress', 'current-time', 
-              'duration', 'mute', 'volume', 'captions', 'settings', 
-              'pip', 'fullscreen'
-            ],
-            settings: ['captions', 'quality', 'speed']
-          });
-        } catch (e) {
-          console.warn("Plyr init safely handled:", e);
-        }
-      }
-    };
-
-    if (window.Plyr) {
-      initPlyr();
-    } else {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.plyr.io/3.7.8/plyr.polyfilled.js';
-      script.onload = initPlyr;
-      document.body.appendChild(script);
-    }
-
-    return () => {
-      isMounted = false;
-      if (playerInstanceRef.current) {
-        try {
-          playerInstanceRef.current.destroy();
-        } catch (e) {
-          // تجاهل أخطاء التدمير الحادثة في DOM
-        }
-        playerInstanceRef.current = null;
-      }
-    };
-  }, [url]);
-
-  return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <video 
-        ref={videoRef}
-        key={url}
-        controls 
-        autoPlay
-        playsInline 
-        style={{ width: '100%', height: '100%' }}
-      >
-        <source src={url} />
-      </video>
-    </div>
-  );
-}
-
 export default function MovieDetail() {
   const router = useRouter();
   const { id, type } = router.query;
@@ -94,10 +19,57 @@ export default function MovieDetail() {
   const [activeServer, setActiveServer] = useState('debrid');
   const [loading, setLoading] = useState(true);
 
+  // حالة الموسم والحلقة التفصيلية
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
+  const [episodesList, setEpisodesList] = useState([]);
 
-  // جلب البيانات
+  const videoRef = useRef(null);
+
+  // 1️⃣ جلب تفاصيل المسلسل/الفيلم والحلقات من TMDB
+  useEffect(() => {
+    if (!id) return;
+
+    async function fetchMetadata() {
+      const isTv = type === 'tv';
+      const finalType = isTv ? 'tv' : 'movie';
+
+      try {
+        const res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=ar-SA`);
+        if (res.ok) {
+          const data = await res.json();
+          setMovieData(data);
+        }
+      } catch (e) {
+        console.error("TMDB Fetch Error:", e);
+      }
+    }
+
+    fetchMetadata();
+  }, [id, type]);
+
+  // 2️⃣ جلب حلقات الموسم المحدد للمسلسلات
+  useEffect(() => {
+    if (!id || (type !== 'tv' && movieData?.media_type_fixed !== 'tv')) return;
+
+    async function fetchSeasonEpisodes() {
+      try {
+        const res = await fetch(`${TMDB_BASE_URL}/tv/${id}/season/${season}?api_key=${TMDB_API_KEY}&language=ar-SA`);
+        if (res.ok) {
+          const sData = await res.json();
+          if (sData.episodes) {
+            setEpisodesList(sData.episodes);
+          }
+        }
+      } catch (e) {
+        console.error("Season Episodes Error:", e);
+      }
+    }
+
+    fetchSeasonEpisodes();
+  }, [id, type, season, movieData]);
+
+  // 3️⃣ جلب روابط Real-Debrid عند تغير الفيلم/الموسم/الحلقة
   useEffect(() => {
     if (!id) return;
 
@@ -108,25 +80,11 @@ export default function MovieDetail() {
       setRdStatus('loading');
       setErrorMessage('');
 
-      const isTv = type === 'tv';
+      const isTv = type === 'tv' || movieData?.number_of_seasons > 0;
       const finalType = isTv ? 'tv' : 'movie';
 
       try {
-        let res = await fetch(`${TMDB_BASE_URL}/${finalType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
-        let mData = null;
-        if (res.ok) mData = await res.json();
-
-        if (!mData || mData.success === false) {
-          const altType = finalType === 'movie' ? 'tv' : 'movie';
-          res = await fetch(`${TMDB_BASE_URL}/${altType}/${id}?api_key=${TMDB_API_KEY}&append_to_response=external_ids&language=en-US`);
-          if (res.ok) mData = await res.json();
-        }
-
-        if (isMounted && mData) {
-          setMovieData(mData);
-        }
-
-        const imdbId = mData?.external_ids?.imdb_id;
+        const imdbId = movieData?.external_ids?.imdb_id;
 
         if (imdbId) {
           const queryTarget = isTv ? `${imdbId}:${season}:${episode}` : imdbId;
@@ -171,31 +129,33 @@ export default function MovieDetail() {
           }
         }
       } catch (err) {
-        console.error("Fetch Error:", err);
+        console.error("Stream Fetch Error:", err);
       }
 
       if (isMounted) {
         setRdStatus('failed');
-        setErrorMessage('تعذر العثور على رابط Real-Debrid مباشر.');
+        setErrorMessage('تعذر العثور على رابط Real-Debrid.');
         setActiveServer('vidsrc_cc');
         setLoading(false);
       }
     }
 
-    fetchStreamData();
+    if (movieData) {
+      fetchStreamData();
+    }
 
     return () => { isMounted = false; };
-  }, [id, type, season, episode]);
+  }, [id, type, season, episode, movieData]);
 
-  if (loading) {
+  if (loading && !movieData) {
     return (
       <div style={{ color: 'white', backgroundColor: '#050505', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl' }}>
-        <h3 style={{ color: '#e50914' }}>🍿 جاري التحقق وجلب رابط البث...</h3>
+        <h3 style={{ color: '#e50914' }}>🍿 جاري التحميل...</h3>
       </div>
     );
   }
 
-  const isTvShow = (type === 'tv' || movieData?.media_type_fixed === 'tv');
+  const isTvShow = (type === 'tv' || movieData?.number_of_seasons > 0);
   const displayTitle = movieData ? (movieData.title || movieData.name) : 'عرض مباشر 📺';
 
   const embedUrl = isTvShow 
@@ -234,39 +194,66 @@ export default function MovieDetail() {
         </div>
       )}
 
-      {/* اختيار الموسم والحلقة للمسلسلات */}
+      {/* 📺 اختيار الموسم والحلقة الديناميكي المطور للمسلسلات */}
       {isTvShow && (
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222', alignItems: 'center' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-            الموسم:
-            <input 
-              type="number" 
-              min="1" 
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #222', alignItems: 'center' }}>
+          
+          {/* قائمة المواسم */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontWeight: 'bold', color: '#e50914' }}>📅 الموسم:</span>
+            <select 
               value={season} 
-              onChange={(e) => setSeason(Math.max(1, Number(e.target.value)))} 
-              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px', textAlign: 'center' }}
-            />
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-            الحلقة:
-            <input 
-              type="number" 
-              min="1" 
+              onChange={(e) => {
+                setSeason(Number(e.target.value));
+                setEpisode(1); // العودة للحلقة الأولى عند تغيير الموسم
+              }}
+              style={{ padding: '8px 12px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              {Array.from({ length: movieData?.number_of_seasons || 1 }, (_, i) => i + 1).map((sNum) => (
+                <option key={sNum} value={sNum}>
+                  الموسم {sNum}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* قائمة الحلقات التفصيلية */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 الحلقة:</span>
+            <select 
               value={episode} 
-              onChange={(e) => setEpisode(Math.max(1, Number(e.target.value)))} 
-              style={{ width: '60px', padding: '8px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px', textAlign: 'center' }}
-            />
-          </label>
+              onChange={(e) => setEpisode(Number(e.target.value))}
+              style={{ padding: '8px 12px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              {episodesList.length > 0 ? (
+                episodesList.map((ep) => (
+                  <option key={ep.episode_number} value={ep.episode_number}>
+                    الحلقة {ep.episode_number} - {ep.name || `حلقة ${ep.episode_number}`}
+                  </option>
+                ))
+              ) : (
+                <option value={1}>الحلقة 1</option>
+              )}
+            </select>
+          </div>
+
         </div>
       )}
 
-      {/* اختيار الجودة */}
+      {/* 🎬 اختيار الجودة بدون كسر DOM */}
       {activeServer === 'debrid' && qualityOptions.length > 0 && (
         <div style={{ marginBottom: '15px', backgroundColor: '#111', padding: '12px 18px', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 'bold', color: '#e50914' }}>🎬 اختر الجودة:</span>
+          <span style={{ fontWeight: 'bold', color: '#e50914' }}>⚙️ اختر الجودة:</span>
           <select 
             value={resolvedStreamUrl}
-            onChange={(e) => setResolvedStreamUrl(e.target.value)}
+            onChange={(e) => {
+              const newUrl = e.target.value;
+              setResolvedStreamUrl(newUrl);
+              if (videoRef.current) {
+                videoRef.current.src = newUrl;
+                videoRef.current.play();
+              }
+            }}
             style={{ padding: '8px 16px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', outline: 'none' }}
           >
             {qualityOptions.map((q, idx) => (
@@ -299,11 +286,19 @@ export default function MovieDetail() {
         <button onClick={() => setActiveServer('vidlink')} style={{ padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: activeServer === 'vidlink' ? '#e50914' : '#111', color: '#fff', border: '1px solid #333' }}>سيرفر احتياطي 3</button>
       </div>
 
-      {/* منطقة المشغل الحاوية */}
+      {/* منطقة المشغل المستقرة */}
       <div style={{ backgroundColor: '#000', padding: '15px', borderRadius: '12px', border: '2px solid #e50914' }}>
         <div style={{ position: 'relative', width: '100%', minHeight: '60vh', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
           {activeServer === 'debrid' && resolvedStreamUrl ? (
-            <CustomPlayer url={resolvedStreamUrl} />
+            <video 
+              ref={videoRef}
+              controls 
+              autoPlay
+              playsInline 
+              style={{ width: '100%', height: '60vh', borderRadius: '8px' }}
+            >
+              <source src={resolvedStreamUrl} />
+            </video>
           ) : (
             <iframe 
               src={servers[activeServer]} 
