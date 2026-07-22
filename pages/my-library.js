@@ -1,4 +1,3 @@
-// pages/my-library.js
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -39,7 +38,6 @@ export default function MyLibrary() {
         <title>مكتبتي - CINEMATRIX</title>
       </Head>
 
-      {/* هيدر مصغر مدمج تجنباً لمشاكل استدعاء Navbar */}
       <nav style={{ backgroundColor: '#141414', borderBottom: '1px solid #222', padding: '12px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link href="/" style={{ color: '#e50914', fontSize: '22px', fontWeight: '900', textDecoration: 'none' }}>
           CINEMATRIX
@@ -52,7 +50,6 @@ export default function MyLibrary() {
       <div style={{ padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '28px', color: '#e50914', marginBottom: '20px', fontWeight: 'bold' }}>📚 مكتبتي الشخصية</h1>
 
-        {/* أزرار التنقل */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
           <button
             onClick={() => setActiveTab('favorites')}
@@ -85,7 +82,6 @@ export default function MyLibrary() {
           </button>
         </div>
 
-        {/* عرض المحتوى */}
         {loading ? (
           <p style={{ color: '#888' }}>جاري تحميل المكتبة...</p>
         ) : items.length === 0 ? (
