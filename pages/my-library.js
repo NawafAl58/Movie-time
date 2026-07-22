@@ -2,10 +2,11 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import Navbar from '../components/Navbar';
+import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabaseClient';
 
 export default function MyLibrary() {
+  const router = useRouter();
   const [items, setItems] = useState([]);
   const [activeTab, setActiveTab] = useState('favorites');
   const [loading, setLoading] = useState(true);
@@ -38,12 +39,20 @@ export default function MyLibrary() {
         <title>مكتبتي - CINEMATRIX</title>
       </Head>
 
-      <Navbar />
+      {/* هيدر مصغر مدمج تجنباً لمشاكل استدعاء Navbar */}
+      <nav style={{ backgroundColor: '#141414', borderBottom: '1px solid #222', padding: '12px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Link href="/" style={{ color: '#e50914', fontSize: '22px', fontWeight: '900', textDecoration: 'none' }}>
+          CINEMATRIX
+        </Link>
+        <button onClick={() => router.push('/')} style={{ backgroundColor: '#222', color: '#fff', border: '1px solid #333', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+          ← الرئيسية
+        </button>
+      </nav>
 
       <div style={{ padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '28px', color: '#e50914', marginBottom: '20px', fontWeight: 'bold' }}>📚 مكتبتي الشخصية</h1>
 
-        {/* أزرار التنقل بين المفضلة وقائمة المشاهدة */}
+        {/* أزرار التنقل */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
           <button
             onClick={() => setActiveTab('favorites')}
@@ -87,7 +96,7 @@ export default function MyLibrary() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '20px' }}>
             {items.map((item) => (
               <Link key={item.id} href={`/movie/${item.media_id}?type=${item.media_type}`} style={{ textDecoration: 'none', color: '#fff' }}>
-                <div style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222', transition: 'transform 0.2s' }}>
+                <div style={{ backgroundColor: '#111', borderRadius: '8px', overflow: 'hidden', border: '1px solid #222' }}>
                   <img
                     src={item.poster_path ? `https://image.tmdb.org/t/p/w300${item.poster_path}` : 'https://via.placeholder.com/300x450'}
                     alt={item.title}
